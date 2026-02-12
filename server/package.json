@@ -1,0 +1,16 @@
+{
+  "name": "poker-tourney-server",
+  "version": "1.0.0",
+  "description": "Poker bot simulator backend",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^4.21.0",
+    "socket.io": "^4.7.5"
+  }
+}

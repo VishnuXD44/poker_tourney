@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Poker Bot Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=JetBrains+Mono:wght@400;600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <div class="app">
+    <header class="header">
+      <div class="header-brand">Poker Bot Simulator</div>
+      <p class="tagline">Build bots. Run matches. Crown a winner.</p>
+    </header>
+
+    <nav class="tabs" aria-label="Main sections">
+      <button type="button" class="tab active" data-tab="bots">Bots</button>
+      <button type="button" class="tab" data-tab="match">Run Match</button>
+      <button type="button" class="tab" data-tab="results">Results</button>
+    </nav>
+
+    <main id="main-content" class="content">
+      <section id="panel-bots" class="panel active">
+        <div class="bots-toolbar">
+          <h2>Your Bots</h2>
+          <button type="button" class="btn btn-primary" id="btn-new-bot">+ New Bot</button>
+        </div>
+        <ul class="bot-list" id="bot-list"></ul>
+        <div class="bot-editor-wrap" id="bot-editor-wrap" hidden>
+          <div class="bot-editor-header">
+            <input type="text" id="bot-name" class="bot-name-input" placeholder="Bot name">
+            <div class="bot-editor-actions">
+              <button type="button" class="btn btn-ghost" id="btn-cancel-bot">Cancel</button>
+              <button type="button" class="btn btn-primary" id="btn-save-bot">Save</button>
+            </div>
+          </div>
+          <textarea id="bot-code" class="bot-code-editor" placeholder="function getAction(state) {&#10;  // state: stage, pot, currentBet, minRaise, toCall, myChips, myCards, communityCards, opponents&#10;  if (state.toCall === 0) return { action: 'check' };&#10;  return { action: 'call' };&#10;}"></textarea>
+          <p class="editor-hint">Return <code>{ action: 'fold'|'call'|'check'|'raise'|'all-in', amount?: number }</code>. Raise amount is the minimum raise size.</p>
+        </div>
+      </section>
+
+      <section id="panel-match" class="panel">
+        <h2>Run a Match</h2>
+        <p class="panel-desc">Select 2–9 bots and run a fixed number of hands. Last bot with chips wins.</p>
+        <div class="match-setup">
+          <div class="match-bots-select">
+            <label>Bots in match</label>
+            <div class="checkbox-list" id="match-bot-checkboxes"></div>
+          </div>
+          <div class="match-options">
+            <label>Hands <input type="number" id="match-hands" value="50" min="10" max="500"></label>
+            <label>Small blind <input type="number" id="match-sb" value="10" min="1"></label>
+            <label>Big blind <input type="number" id="match-bb" value="20" min="1"></label>
+            <label>Starting chips <input type="number" id="match-chips" value="1000" min="100"></label>
+          </div>
+          <button type="button" class="btn btn-primary btn-lg" id="btn-run-match">Run Match</button>
+        </div>
+      </section>
+
+      <section id="panel-results" class="panel">
+        <h2>Match Results</h2>
+        <div id="results-placeholder" class="results-placeholder">Run a match to see results here.</div>
+        <div id="results-content" class="results-content" hidden>
+          <div class="results-summary" id="results-summary"></div>
+          <div class="chip-standings" id="chip-standings"></div>
+          <details class="hand-logs">
+            <summary>Hand-by-hand log</summary>
+            <div id="hand-logs-inner"></div>
+          </details>
+        </div>
+      </section>
+    </main>
+    <footer class="footer">
+      <p>Poker Bot Simulator</p>
+      <p class="footer-tag">Build bots. Run matches. Crown a winner.</p>
+    </footer>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700&family=JetBrains+Mono:wght@400;600&family=Outfit:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg: #f6f5f3;
+  --surface: #ffffff;
+  --surface-alt: #fafaf9;
+  --gold: #b8860b;
+  --gold-light: #d4af37;
+  --gold-bright: #e8c547;
+  --navy: #1a2744;
+  --navy-muted: #2d3a5a;
+  --text: #1a2744;
+  --text-muted: #5c6577;
+  --border: #e2dfda;
+  --danger: #c53030;
+  --success: #276749;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Outfit', system-ui, sans-serif;
+}
