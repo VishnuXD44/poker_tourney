@@ -1,43 +1,46 @@
 "use client";
 
+import Panel from "./Panel";
+
 export default function Leaderboard({ update }) {
   const chipCounts = update?.chipCounts ?? [];
   const sorted = [...chipCounts].sort((a, b) => (b.chips ?? 0) - (a.chips ?? 0));
+  const total = sorted.reduce((s, p) => s + (p.chips ?? 0), 0);
   const winner = update?.winner ?? null;
   const isEnd = update?.type === "MATCH_END";
 
-  const sectionStyle = {
-    background: "#ffffff",
-    border: "1px solid #e2dfda",
-    boxShadow: "0 4px 12px rgba(26,39,68,0.06)",
-  };
   return (
-    <section className="rounded-xl p-6" style={sectionStyle}>
-      <h2 className="text-lg font-bold mb-4" style={{ color: "#1a2744" }}>Leaderboard</h2>
+    <Panel index="03" title="standings" aside={total ? `${total.toLocaleString()} chips` : null}>
       {sorted.length === 0 ? (
-        <p className="text-sm text-[#5c6577]">Chip counts will appear when a match is running.</p>
+        <p className="text-xs text-muted">chip counts appear once a match is running.</p>
       ) : (
-        <ul className="space-y-2">
-          {sorted.map((p, i) => (
-            <li
-              key={p.id}
-              className={`flex justify-between items-center px-4 py-2.5 rounded-lg border ${
-                isEnd && winner === p.name
-                  ? "bg-gradient-to-r from-[#b8860b]/10 to-transparent border-[#b8860b] text-[#1a2744] font-semibold"
-                  : "bg-[#fafaf9] border-[#e2dfda] text-[#1a2744]"
-              }`}
-            >
-              <span className="text-sm font-medium">
-                {i + 1}. {p.name}
-                {isEnd && winner === p.name && (
-                  <span className="ml-2 text-[#b8860b] text-xs font-semibold">Winner</span>
-                )}
-              </span>
-              <span className="text-sm font-mono font-semibold text-[#1a2744]">{p.chips}</span>
-            </li>
-          ))}
-        </ul>
+        <ol className="space-y-3">
+          {sorted.map((p, i) => {
+            const won = isEnd && winner === p.name;
+            const share = total ? (p.chips / total) * 100 : 0;
+            return (
+              <li key={p.id}>
+                <div className={`flex items-baseline gap-3 text-sm ${p.chips === 0 ? "text-muted" : ""}`}>
+                  <span className="text-muted text-xs w-5">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="flex-1 truncate">
+                    {p.name}
+                    {won && (
+                      <span className="ml-2 text-[10px] uppercase tracking-[0.14em] px-1.5 py-0.5 rounded-sm bg-ink text-surface">
+                        winner
+                      </span>
+                    )}
+                  </span>
+                  <span className="tabular-nums">{p.chips === 0 ? "out" : p.chips.toLocaleString()}</span>
+                </div>
+                {/* Share of all chips on the table */}
+                <div className="ml-8 mt-1.5 h-px bg-line">
+                  <div className="h-px bg-hi transition-[width] duration-300" style={{ width: `${share}%` }} />
+                </div>
+              </li>
+            );
+          })}
+        </ol>
       )}
-    </section>
+    </Panel>
   );
 }

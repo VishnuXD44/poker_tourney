@@ -41,9 +41,9 @@ HandValue HandEvaluator::evaluateHand(const std::vector<Card>& cards) {
     }
     
     // Check all possible 5-card combinations and return the best
-    std::vector<Card> bestHand;
     HandValue bestValue(HandRank::HIGH_CARD, {});
-    
+    bool haveBest = false;
+
     // For 7 cards, check all C(7,5) = 21 combinations
     std::vector<int> indices(cards.size());
     for (size_t i = 0; i < indices.size(); i++) indices[i] = i;
@@ -67,8 +67,11 @@ HandValue HandEvaluator::evaluateHand(const std::vector<Card>& cards) {
         if (hv.rank == HandRank::HIGH_CARD) hv = checkPair(hand);
         if (hv.rank == HandRank::HIGH_CARD) hv = checkHighCard(hand);
         
-        if (hv > bestValue) {
+        // Seed with the first combination: an empty tiebreaker list would make every
+        // high-card hand compare equal to it.
+        if (!haveBest || hv > bestValue) {
             bestValue = hv;
+            haveBest = true;
         }
     } while (std::prev_permutation(selector.begin(), selector.end()));
     

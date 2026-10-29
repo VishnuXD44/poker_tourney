@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { io } from "socket.io-client";
 import LiveTable from "@/components/LiveTable";
 import Leaderboard from "@/components/Leaderboard";
@@ -9,6 +9,9 @@ import BotUploadPanel from "@/components/BotUploadPanel";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3000";
+// Must match the server's API_TOKEN when one is set. Note it is visible to anyone who can load the dashboard.
+const API_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN || "";
+const AUTH_HEADERS = API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {};
 
 export default function DashboardPage() {
   const [bots, setBots] = useState([]);
@@ -16,6 +19,7 @@ export default function DashboardPage() {
   const [matchUpdate, setMatchUpdate] = useState(null);
   const [connected, setConnected] = useState(false);
   const [constraints, setConstraints] = useState(null);
+  const currentMatchId = useRef(null);
 
   const loadBots = useCallback(
     () =>
@@ -35,10 +39,12 @@ export default function DashboardPage() {
   }, [loadBots]);
 
   useEffect(() => {
-    const s = io(SOCKET_URL, { autoConnect: true });
+    const s = io(SOCKET_URL, { autoConnect: true, auth: API_TOKEN ? { token: API_TOKEN } : {} });
     s.on("connect", () => setConnected(true));
     s.on("disconnect", () => setConnected(false));
-    s.on("MATCH_UPDATE", (payload) => setMatchUpdate(payload));
+    s.on("MATCH_UPDATE", (payload) => {
+      if (payload?.matchId === currentMatchId.current) setMatchUpdate(payload);
+    });
     setSocket(s);
     return () => s.disconnect();
   }, []);
@@ -46,71 +52,49 @@ export default function DashboardPage() {
   const startMatch = (payload) => {
     if (!socket?.connected) return;
     socket.emit("new_match", payload, (ack) => {
-      if (ack?.error) console.error(ack.error);
+      if (ack?.error) {
+        setMatchUpdate({ type: "MATCH_ERROR", error: ack.error });
+        return;
+      }
+      currentMatchId.current = ack?.matchId ?? null;
+      setMatchUpdate(null);
     });
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6" style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}>
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
       <a
         href="#main-content"
-        className="absolute -top-12 left-4 px-4 py-2 bg-[#1a2744] text-[#e8c547] font-semibold rounded-lg z-50 focus:top-4 focus:outline focus:ring-2 focus:ring-[#b8860b] focus:ring-offset-2 transition-[top]"
+        className="absolute -top-12 left-4 px-3 py-2 bg-ink text-surface text-xs uppercase tracking-widest rounded z-50 focus:top-4 transition-[top]"
       >
         Skip to main content
       </a>
-      <header
-        className="text-center mb-8 p-8 rounded-xl border shadow-sm"
-        style={{
-          background: "#ffffff",
-          borderColor: "#e2dfda",
-          boxShadow: "0 4px 12px rgba(26,39,68,0.06)",
-        }}
-      >
-        <h1
-          className="text-3xl font-bold tracking-tight"
-          style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", color: "#1a2744" }}
-        >
-          Poker Bot Competition
-        </h1>
-        <div
-          className="w-16 h-0.5 mx-auto mt-2 rounded-full"
-          style={{ background: "linear-gradient(90deg, #b8860b 0%, #d4af37 100%)" }}
-          aria-hidden
-        />
-        <p className="text-sm mt-3 font-medium" style={{ color: "#5c6577" }}>
-          Live stream & leaderboard
-        </p>
-        <div className="mt-2 flex items-center justify-center gap-2">
-          <span
-            className="h-2 w-2 rounded-full flex-shrink-0"
-            style={{ background: connected ? "#276749" : "#c53030" }}
-          />
-          <span className="text-xs" style={{ color: "#5c6577" }}>
-            {connected ? "Connected" : "Disconnected"}
-          </span>
+      <header className="flex flex-wrap items-end justify-between gap-4 mb-10 pb-5 border-b border-line">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">poker_tourney</h1>
+          <p className="text-xs text-muted mt-1">texas hold&apos;em · c++ bot arena</p>
         </div>
+        <p className="text-xs flex items-center gap-2" role="status">
+          <span aria-hidden>{connected ? "●" : "○"}</span>
+          <span className={connected ? "text-ink" : "text-muted"}>{connected ? "online" : "offline"}</span>
+        </p>
       </header>
 
-      <main id="main-content" className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
-          <BotUploadPanel apiUrl={API_URL} constraints={constraints} bots={bots} onBotUploaded={loadBots} />
-          <NewMatchForm bots={bots} onRunMatch={startMatch} disabled={!connected} update={matchUpdate} />
+      <main id="main-content" className="grid gap-8 lg:grid-cols-3">
+        <div className="lg:col-span-2">
           <LiveTable update={matchUpdate} />
         </div>
-        <div>
+        <div className="space-y-8">
+          <NewMatchForm bots={bots} onRunMatch={startMatch} disabled={!connected} update={matchUpdate} />
           <Leaderboard update={matchUpdate} />
         </div>
+        <div className="lg:col-span-3">
+          <BotUploadPanel apiUrl={API_URL} authHeaders={AUTH_HEADERS} constraints={constraints} bots={bots} onBotUploaded={loadBots} />
+        </div>
       </main>
-      <footer
-        className="mt-10 pt-6 border-t text-center"
-        style={{ borderColor: "#e2dfda" }}
-      >
-        <p className="text-base font-semibold" style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", color: "#1a2744" }}>
-          Poker Bot Competition
-        </p>
-        <p className="text-sm mt-1" style={{ color: "#5c6577" }}>
-          Live stream & leaderboard
-        </p>
+      <footer className="mt-12 pt-5 border-t border-line text-xs text-muted flex justify-between">
+        <span>poker_tourney</span>
+        <span>{bots.length} bots registered</span>
       </footer>
     </div>
   );

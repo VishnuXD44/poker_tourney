@@ -1,64 +1,40 @@
-# PokerBot Competition System Architecture
+# Architecture
 
-This document outlines the interaction between the **Tournament Runner (Backend)**, the **Bot Players**, and the **Web UI**.
+How the dashboard, the game server and the bots fit together. Setup, the bot protocol and configuration are covered in the [README](README.md).
 
-## 1. High-Level System Overview
+## Components
 
-The system follows a "Hub and Spoke" model where the Backend Engine (Dealer) acts as the central authority.
+```
+Dashboard (Next.js :3001)
+  │  REST: upload/list/delete bots      Socket.IO: new_match → MATCH_UPDATE (to the starting socket only)
+  ▼
+Server (Node.js :3000, listens on 127.0.0.1 by default)
+  ├── bots/botStore.js      bot registry, saved to runtime/bots/bots.json
+  ├── bots/cppBotRunner.js  validate → include check (-M) → compile → warm-up run
+  ├── bots/sandbox.js       sandbox-exec (macOS) / bwrap (Linux) + ulimits
+  ├── match/matchRunner.js  runs N hands, emits updates
+  └── game/                 Texas Hold'em rules (pokerGame.js), hand evaluation, deck
+  │
+  │  one process per decision: JSON state on stdin → JSON action on stdout (500 ms)
+  ▼
+Compiled C++ bot binaries (sandboxed)
+```
 
+The standalone C++ engine in the repo root is a separate terminal game. The server doesn't use it.
 
+## Game engine (`server/game/pokerGame.js`)
 
----
+- **Seating:** players with 0 chips sit out. The button moves to the next player who still has chips.
+- **Blinds:** posted from the stack into `currentBet`. The pot holds only chips from finished streets, so nothing is counted twice.
+- **Betting round:** a queue of players who still need to act. A full raise puts every other active player back in the queue. A short all-in only adds players who haven't matched it. The round ends when the queue is empty or one player remains.
+- **Showdown:** `buildPots` splits each player's total contribution into a main pot and side pots. Each pot goes to the best hand among the players eligible for it. Odd chips go to the first winner left of the button.
 
-## 2. Component Descriptions
+`server/test/pokerGame.test.js` covers these rules. It includes a fuzz test that plays about 2,000 random hands across 2–9 player tables and checks that chips are never created or lost.
 
-### A. The Backend Engine (The Dealer)
-- **Role**: Manages the deck, enforces poker rules, tracks pot sizes, and handles timing.
-- **Tech Stack**: C++ for high-speed logic and low latency.
-- **Responsibility**: 
-    - Spawning Bot Containers.
-    - Sending "Game State" packets.
-    - Validating that Bot moves are legal.
-    - Recording "Game Logs" for the UI.
+## Bot pipeline
 
-### B. The Player Containers (The Bots)
-- **Role**: Execute user-submitted strategies.
-- **Environment**: Docker containers with CPU/RAM limits (e.g., 512MB RAM, 1 vCPU).
-- **Communication**: Connected to the Engine via **TCP Sockets**.
-- **Constraints**: No internet access; limited time-bank (e.g., 100ms per move).
-
-### C. The Web UI (The Dashboard)
-- **Role**: Provides a visual "Live Stream" of matches and the Leaderboard.
-- **Tech Stack**: React/Next.js with Tailwind CSS.
-- **Connection**: Uses **WebSockets (Socket.io)** to receive real-time updates from the Backend.
-
----
-
-## 3. Communication Flow
-
-| Step | From | To | Description |
-| :--- | :--- | :--- | :--- |
-| 1 | **UI** | **Backend** | User requests a "New Match." |
-| 2 | **Backend** | **Docker** | Spawns Bot A and Bot B containers. |
-| 3 | **Backend** | **Bots** | Sends `GET_ACTION` JSON via TCP (Hole cards, stack sizes). |
-| 4 | **Bots** | **Backend** | Returns `ACTION` (e.g., `{"action": "RAISE", "amount": 400}`). |
-| 5 | **Backend** | **UI** | Broadcasts `MATCH_UPDATE` via WebSocket to animate the table. |
-
----
-
-## 4. Data Packet Examples
-
-### Engine -> Bot (Requesting a move)
-The engine sends the current state of the table.
-```json
-{
-  "request": "action",
-  "table_state": {
-    "pot": 150,
-    "board": ["As", "Kd", "Jh"],
-    "my_hand": ["Ac", "Ts"],
-    "opponent_stack": 1200,
-    "min_raise": 50,
-    "time_remaining": 2500
-  }
-}
+1. **Validate:** extension, size, `int main`, and a blocklist of dangerous constructs (checked after joining lines split with `\`).
+2. **Include check:** `-M -MF` dependency output. Every file must be the bot itself or live in the compiler's system include dirs.
+3. **Compile** in a temporary job directory, inside the sandbox, with CPU and memory limits. Compiler errors have local paths removed and are truncated.
+4. **Warm up:** run the bot once so slow first-launch checks don't count against its first in-game decision.
+5. **Run:** each decision spawns the sandboxed binary with an empty environment, a 500 ms timeout and a 4 KB output cap. Anything other than a valid action counts as a fold.

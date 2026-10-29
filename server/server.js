@@ -1,7 +1,6 @@
 import express from 'express';
 import http from 'http';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 import cors from 'cors';
 import { Server } from 'socket.io';
 import { listBots, getBot, createBot, updateBot, deleteBot } from './bots/botStore.js';
@@ -12,15 +11,34 @@ import {
   removeBotArtifacts,
   validateCppBotSource,
 } from './bots/cppBotRunner.js';
+import { initSandbox } from './bots/sandbox.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Comma-separated list of origins allowed to call the API (the dashboard).
+const CORS_ORIGINS = (process.env.CORS_ORIGIN || 'http://localhost:3001,http://127.0.0.1:3001')
+  .split(',').map(s => s.trim()).filter(Boolean);
+// When set, mutating API calls and socket connections must present this token.
+const API_TOKEN = process.env.API_TOKEN || '';
+
 const app = express();
 const httpServer = http.createServer(app);
-const io = new Server(httpServer, { cors: { origin: '*' } });
+const io = new Server(httpServer, { cors: { origin: CORS_ORIGINS } });
 
-app.use(cors());
+app.use(cors({ origin: CORS_ORIGINS }));
 app.use(express.json({ limit: '250kb' }));
-app.use(express.static(path.join(__dirname, '..', 'public')));
+
+function tokenMatches(given) {
+  if (!API_TOKEN) return true;
+  const a = Buffer.from(String(given || ''));
+  const b = Buffer.from(API_TOKEN);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function requireToken(req, res, next) {
+  const header = req.get('authorization') || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (!tokenMatches(token)) return res.status(401).json({ error: 'Missing or invalid API token' });
+  next();
+}
 
 const BOT_NAME_MAX = 80;
 const MATCH_RATE_WINDOW_MS = 60 * 1000;
@@ -81,7 +99,7 @@ app.get('/api/bots/:id', (req, res) => {
   res.json(toPublicBot(bot));
 });
 
-app.post('/api/bots', (req, res) => {
+app.post('/api/bots', requireToken, (req, res) => {
   (async () => {
     if (!checkBotCreateRateLimit(getClientIp(req))) {
       return res.status(429).json({ error: 'Too many bots created; try again later' });
@@ -121,7 +139,7 @@ app.post('/api/bots', (req, res) => {
   });
 });
 
-app.put('/api/bots/:id', (req, res) => {
+app.put('/api/bots/:id', requireToken, (req, res) => {
   (async () => {
     const existing = getBot(req.params.id);
     if (!existing) return res.status(404).json({ error: 'Bot not found' });
@@ -159,7 +177,7 @@ app.put('/api/bots/:id', (req, res) => {
   });
 });
 
-app.delete('/api/bots/:id', (req, res) => {
+app.delete('/api/bots/:id', requireToken, (req, res) => {
   (async () => {
     const removed = deleteBot(req.params.id);
     if (!removed) return res.status(404).json({ error: 'Bot not found' });
@@ -171,14 +189,28 @@ app.delete('/api/bots/:id', (req, res) => {
   });
 });
 
+// Updates go only to sockets in the match's room: the one that started it, plus any `watch_match` subscribers.
 function createMatchOnUpdate(matchId) {
   return (payload) => {
-    io.emit('MATCH_UPDATE', { matchId, ...payload });
+    io.to(matchId).emit('MATCH_UPDATE', { matchId, ...payload });
   };
 }
 
+io.use((socket, next) => {
+  if (tokenMatches(socket.handshake.auth?.token)) return next();
+  next(new Error('Missing or invalid API token'));
+});
+
 io.on('connection', (socket) => {
+  socket.on('watch_match', (matchId) => {
+    if (typeof matchId === 'string' && matchId.startsWith('match-')) socket.join(matchId);
+  });
+
   socket.on('new_match', async (payload, ack) => {
+    if (!checkMatchRateLimit(socket.handshake.address)) {
+      ack?.({ error: 'Too many matches; try again in a minute' });
+      return;
+    }
     const matchId = `match-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const { botIds, numHands, smallBlind, bigBlind, startingChips } = payload || {};
     if (!Array.isArray(botIds) || botIds.length < 2) {
@@ -189,6 +221,11 @@ io.on('connection', (socket) => {
       ack?.({ error: 'At most 9 bots per match' });
       return;
     }
+    if (botIds.some(id => typeof id !== 'string' && typeof id !== 'number')) {
+      ack?.({ error: 'Invalid bot id in botIds' });
+      return;
+    }
+    socket.join(matchId);
     ack?.({ matchId });
     try {
       const result = await runMatch(botIds, {
@@ -199,15 +236,15 @@ io.on('connection', (socket) => {
         startingChips,
         onUpdate: createMatchOnUpdate(matchId)
       });
-      if (result.error) io.emit('MATCH_UPDATE', { matchId, type: 'MATCH_ERROR', error: result.error });
+      if (result.error) io.to(matchId).emit('MATCH_UPDATE', { matchId, type: 'MATCH_ERROR', error: result.error });
     } catch (err) {
       console.error('Match error:', err);
-      io.emit('MATCH_UPDATE', { matchId, type: 'MATCH_ERROR', error: String(err.message) });
+      io.to(matchId).emit('MATCH_UPDATE', { matchId, type: 'MATCH_ERROR', error: String(err.message) });
     }
   });
 });
 
-app.post('/api/matches/run', async (req, res) => {
+app.post('/api/matches/run', requireToken, async (req, res) => {
   if (!checkMatchRateLimit(getClientIp(req))) {
     return res.status(429).json({ error: 'Too many matches; try again in a minute' });
   }
@@ -237,11 +274,18 @@ app.post('/api/matches/run', async (req, res) => {
   }
 });
 
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not found' });
 });
 
 const PORT = process.env.PORT || 3000;
-httpServer.listen(PORT, () => {
-  console.log(`Poker Bot Simulator running at http://localhost:${PORT}`);
+// Listen on localhost only unless HOST is set explicitly (e.g. HOST=0.0.0.0).
+const HOST = process.env.HOST || '127.0.0.1';
+
+await initSandbox();
+if (!API_TOKEN && !['127.0.0.1', 'localhost', '::1'].includes(HOST)) {
+  console.warn('WARNING: listening on a public interface without API_TOKEN set; anyone who can reach this port can upload and run bots.');
+}
+httpServer.listen(PORT, HOST, () => {
+  console.log(`Poker Bot Simulator running at http://${HOST}:${PORT}`);
 });

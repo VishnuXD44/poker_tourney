@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Panel from "./Panel";
 
 const ACCEPTED_EXTENSIONS = [".cpp", ".cc", ".cxx"];
 
@@ -10,12 +11,13 @@ function nameFromFilename(filename) {
   return base.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || base;
 }
 
-export default function BotUploadPanel({ apiUrl, constraints, bots, onBotUploaded }) {
+export default function BotUploadPanel({ apiUrl, authHeaders = {}, constraints, bots, onBotUploaded }) {
   const [botName, setBotName] = useState("");
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const fileInput = useRef(null);
 
   useEffect(() => {
     if (file && !botName.trim()) setBotName(nameFromFilename(file.name));
@@ -37,7 +39,7 @@ export default function BotUploadPanel({ apiUrl, constraints, bots, onBotUploade
       const code = await file.text();
       const res = await fetch(`${apiUrl}/api/bots`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({
           name: nameToSend,
           filename: file.name,
@@ -48,9 +50,10 @@ export default function BotUploadPanel({ apiUrl, constraints, bots, onBotUploade
       if (!res.ok) {
         throw new Error(payload.error || "Upload failed");
       }
-      setSuccess(`Uploaded and verified: ${payload.name}`);
+      setSuccess(`compiled and registered ${payload.name}`);
       setBotName("");
       setFile(null);
+      if (fileInput.current) fileInput.current.value = "";
       onBotUploaded?.(payload);
     } catch (err) {
       setError(err.message || "Upload failed");
@@ -59,91 +62,78 @@ export default function BotUploadPanel({ apiUrl, constraints, bots, onBotUploade
     }
   };
 
-  const cardStyle = {
-    background: "#ffffff",
-    border: "1px solid #e2dfda",
-    boxShadow: "0 4px 12px rgba(26,39,68,0.06)",
-  };
-
   return (
-    <section className="rounded-xl p-6" style={cardStyle}>
-      <h2 className="text-lg font-bold mb-1" style={{ color: "#1a2744" }}>Upload C++ Bot</h2>
-      <p className="text-sm text-[#5c6577] mb-4">
-        Upload a C++ source bot. We validate constraints, compile it, and use the executable during matches.
-      </p>
-
-      <div className="grid gap-3 sm:grid-cols-2">
+    <Panel index="04" title="bots" aside={`${bots.length} registered`}>
+      <div className="grid gap-8 md:grid-cols-2">
         <div>
-          <label className="block text-xs font-semibold text-[#1a2744]">Bot name</label>
-          <input
-            type="text"
-            value={botName}
-            onChange={(e) => setBotName(e.target.value)}
-            placeholder="RiverShark"
-            className="w-full mt-1 px-3 py-2 rounded-lg bg-[#fafaf9] border border-[#e2dfda] text-sm text-[#1a2744] focus:border-[#b8860b] focus:ring-2 focus:ring-[#b8860b]/15 outline-none"
-          />
+          <p className="label mb-3">upload c++ bot</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="label">name</span>
+              <input
+                type="text"
+                value={botName}
+                onChange={(e) => setBotName(e.target.value)}
+                placeholder="river_shark"
+                className="field"
+              />
+            </label>
+            <label className="block">
+              <span className="label">source file</span>
+              <span className="field flex items-center justify-between gap-2 cursor-pointer hover:border-hi">
+                <span className={`truncate ${file ? "text-ink" : "text-muted"}`}>{file ? file.name : "choose .cpp"}</span>
+                <span className="text-muted" aria-hidden>↑</span>
+              </span>
+              <input
+                ref={fileInput}
+                type="file"
+                accept=".cpp,.cc,.cxx"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                className="sr-only"
+              />
+            </label>
+          </div>
+
+          <button type="button" onClick={upload} disabled={!canUpload} className="btn mt-4">
+            {uploading ? "compiling…" : "upload + verify"}
+          </button>
+
+          {error && (
+            <pre className="mt-3 text-xs text-danger whitespace-pre-wrap max-h-48 overflow-y-auto">error: {error}</pre>
+          )}
+          {success && <p className="mt-3 text-xs">ok: {success}</p>}
+
+          <dl className="mt-6 text-xs grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+            <dt className="text-muted">max size</dt>
+            <dd>{constraints?.maxCodeLength?.toLocaleString() ?? "…"} chars</dd>
+            <dt className="text-muted">extensions</dt>
+            <dd>{(constraints?.allowedExtensions || ACCEPTED_EXTENSIONS).join(" ")}</dd>
+            <dt className="text-muted">timeout</dt>
+            <dd>{constraints?.protocol?.timeoutMs ?? "…"} ms / action</dd>
+            <dt className="text-muted">output</dt>
+            <dd className="text-muted break-words">{constraints?.protocol?.output ?? "one json line with an action"}</dd>
+          </dl>
         </div>
+
         <div>
-          <label className="block text-xs font-semibold text-[#1a2744]">C++ source file</label>
-          <input
-            type="file"
-            accept=".cpp,.cc,.cxx"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className="w-full mt-1 px-3 py-2 rounded-lg bg-[#fafaf9] border border-[#e2dfda] text-sm text-[#1a2744]"
-          />
-        </div>
-      </div>
-
-      <button
-        type="button"
-        onClick={upload}
-        disabled={!canUpload}
-        className="mt-4 w-full py-3 rounded-lg font-semibold border disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm hover:opacity-95"
-        style={{
-          background: "linear-gradient(180deg, #d4af37 0%, #b8860b 100%)",
-          color: "#1a2744",
-          borderColor: "#9a7b2e",
-        }}
-      >
-        {uploading ? "Verifying and compiling..." : "Upload + Verify Bot"}
-      </button>
-
-      {error && (
-        <div className="mt-3 rounded-lg p-3 text-sm" style={{ background: "rgba(197,48,48,0.1)", border: "1px solid rgba(197,48,48,0.3)", color: "#c53030" }}>
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className="mt-3 rounded-lg p-3 text-sm" style={{ background: "rgba(39,103,73,0.1)", border: "1px solid rgba(39,103,73,0.25)", color: "#276749" }}>
-          {success}
-        </div>
-      )}
-
-      <div className="mt-4 rounded-lg p-4 bg-[#fafaf9] border border-[#e2dfda]">
-        <p className="text-sm font-semibold text-[#1a2744] mb-2">Engine constraints</p>
-        <ul className="text-xs text-[#5c6577] space-y-1">
-          <li>Max source length: {constraints?.maxCodeLength ?? "..."}</li>
-          <li>Allowed extensions: {(constraints?.allowedExtensions || ACCEPTED_EXTENSIONS).join(", ")}</li>
-          <li>Action timeout: {constraints?.protocol?.timeoutMs ?? "..."} ms</li>
-          <li>Output format: {constraints?.protocol?.output ?? "JSON line with action"}</li>
-        </ul>
-      </div>
-
-      <div className="mt-4">
-        <p className="text-sm font-semibold text-[#1a2744] mb-2">Registered bots ({bots.length})</p>
-        <div className="max-h-40 overflow-y-auto space-y-2">
+          <p className="label mb-3">registered</p>
           {bots.length === 0 ? (
-            <p className="text-xs text-[#5c6577]">No uploaded bots yet.</p>
+            <p className="text-xs text-muted">no bots uploaded yet.</p>
           ) : (
-            bots.map((bot) => (
-              <div key={bot.id} className="rounded-lg bg-[#fafaf9] border border-[#e2dfda] px-3 py-2 text-sm text-[#1a2744] flex justify-between gap-3">
-                <span className="truncate">{bot.name}</span>
-                <span className="text-xs text-[#5c6577]">{bot.filename || "uploaded.cpp"}</span>
-              </div>
-            ))
+            <ul className="max-h-72 overflow-y-auto divide-y divide-line border-y border-line">
+              {bots.map((bot) => (
+                <li key={bot.id} className="py-2 text-sm flex justify-between gap-3">
+                  <span className="truncate">
+                    <span className="text-muted mr-3">{String(bot.id).padStart(2, "0")}</span>
+                    {bot.name}
+                  </span>
+                  <span className="text-xs text-muted truncate">{bot.filename || "uploaded.cpp"}</span>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </div>
-    </section>
+    </Panel>
   );
 }

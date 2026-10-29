@@ -6,18 +6,20 @@ module.exports = {
   ],
   theme: {
     extend: {
+      // Mirrors the CSS variables in app/globals.css (taken from the card deck).
       colors: {
-        gold: "#b8860b",
-        "gold-light": "#d4af37",
-        "gold-bright": "#e8c547",
-        navy: "#1a2744",
-        "navy-muted": "#2d3a5a",
-        "surface-alt": "#fafaf9",
+        bg: "#0e0f0f",
+        surface: "#090a0a",
+        ink: "#f3f3ed",
+        muted: "#92958f",
+        edge: "#757a72",
+        line: "#2b2d2b",
+        hi: "#c6c9c1",
+        danger: "#d9776b",
       },
       fontFamily: {
-        sans: ["Outfit", "system-ui", "sans-serif"],
-        display: ["Cormorant Garamond", "Georgia", "serif"],
-        mono: ["JetBrains Mono", "monospace"],
+        mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+        sans: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
     },
   },

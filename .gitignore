@@ -37,3 +37,7 @@ yarn-error.log*
 *.swp
 *.swo
 .cache/
+
+# Standalone engine binary
+poker_engine
+tests/hand_evaluator_test

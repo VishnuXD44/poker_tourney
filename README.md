@@ -43,7 +43,7 @@ The **C++ engine** in the repo root (`poker_engine.exe` / `./poker_engine`) is s
 |------|--------|
 | **Game** | Texas Hold'em: blinds, pre-flop → flop → turn → river, full hand evaluation, side pots, all-in. |
 | **Hand eval** | All 21 five-card combinations from 7 cards; standard high-hand ranking. |
-| **Bots** | C++ only (for the web platform). Upload source; server compiles and runs with strict sandbox (no threads, no system calls, no network). |
+| **Bots** | C++ only (for the web platform). Upload source; the server compiles and runs it inside an OS sandbox where available (see [Security](#security)). |
 | **Matches** | 2–9 bots, configurable hands (10–500), blinds, and starting stack. Live updates over Socket.IO. |
 | **Standalone** | CLI engine for testing strategies or driving with your own AI via the text protocol. |
 
@@ -78,6 +78,13 @@ npm run dev
 
 - Open **http://localhost:3001** for the UI.
 - API base: **http://localhost:3000** (e.g. `GET /api/bots`, `POST /api/matches/run`).
+- Uploaded bots are saved to `server/runtime/bots/` and survive restarts.
+
+**Tests:**
+```bash
+cd server && npm test   # game engine: betting rules, side pots, chip conservation fuzz test
+make test               # standalone C++ hand evaluator
+```
 
 Create bots in the dashboard (paste C++ source), then start a match with 2+ bots. You’ll see live chip counts and table updates.
 
@@ -111,12 +118,13 @@ poker_tourney/
 │   │   ├── handEvaluator.js
 │   │   └── pokerGame.js
 │   ├── bots/
-│   │   ├── botStore.js         # In-memory bot registry
-│   │   ├── cppBotRunner.js     # Compile & run C++ bots (stdin/stdout)
-│   │   └── ...
+│   │   ├── botStore.js         # Bot registry, persisted to runtime/bots/bots.json
+│   │   ├── cppBotRunner.js     # Validate, compile & run C++ bots (stdin/stdout)
+│   │   └── sandbox.js          # OS sandbox (sandbox-exec / bubblewrap) + resource limits
 │   ├── match/
 │   │   └── matchRunner.js      # Run multi-hand matches
-│   └── runtime/bots/          # Compiled bot binaries & source (generated)
+│   ├── test/                   # node --test suite for the engine
+│   └── runtime/bots/          # Compiled bot binaries, source & bots.json (generated)
 ├── dashboard/                 # Next.js app (port 3001)
 │   ├── app/
 │   ├── components/             # BotUploadPanel, LiveTable, Leaderboard, etc.
@@ -132,9 +140,9 @@ poker_tourney/
 ├── player.cpp / player.h      # Standalone engine: player base
 ├── poker_game.cpp / .h       # Standalone engine: game loop
 ├── main.cpp                   # Standalone engine entry
+├── tests/                     # Standalone engine tests (make test)
 ├── Makefile
-├── build.bat / clean.bat / run.bat
-└── public/                    # Static assets for server
+└── build.bat / clean.bat / run.bat
 ```
 
 ---
@@ -196,9 +204,16 @@ Bots used by the **server** must follow the **stdin/stdout JSON protocol**. The 
 
 **Output (bot → server):**
 - `action` — one of: `"fold"`, `"check"`, `"call"`, `"raise"`, `"all-in"` (or `"allin"`)
-- `amount` — required only for `"raise"` (integer)
+- `amount` — required only for `"raise"` (integer): how much to raise **by**, on top of calling. It is **not** the total bet.
+  For example, with `currentBet: 40`, `toCall: 40` and `{"action":"raise","amount":60}`, you put in 100 and the bet becomes 100.
 
 Example response: `{"action":"call"}` or `{"action":"raise","amount":80}`
+
+How the server interprets actions:
+- A raise below `minRaise` is raised to `minRaise`. A raise you can't afford becomes all-in.
+- `call` with nothing to call counts as `check`; `check` when there *is* something to call counts as a **fold**.
+- Invalid output, a crash, or no answer within the timeout counts as a **fold**.
+- Players who run out of chips sit out. All-ins create side pots: you can only win from each opponent as much as you put in.
 
 ### Sample bots
 
@@ -215,8 +230,40 @@ Copy or adapt these; they’re valid for upload to the dashboard (single file, `
 - Single C++17 source file; must define `int main()`.
 - Max length ~120 KB of code.
 - Must write exactly one JSON line to stdout.
-- No: `system()`, `popen()`, `exec*`, `fork`, `<thread>`, `<future>`, `<filesystem>`, `<windows.h>`, sockets.
-- Action timeout ~500 ms per decision; compile timeout ~12 s.
+- Only standard library / system headers may be `#include`d.
+- No: `system()`, `popen()`, `exec*`, `fork`, `syscall`, `dlopen`, inline `asm`, token pasting (`##`), `#embed`, `__has_include`, `<thread>`, `<future>`, `<filesystem>`, `<windows.h>`, sockets.
+- Action timeout 500 ms per decision; compile timeout 20 s.
+
+---
+
+## Security
+
+The server compiles and runs code uploaded by other people, so it uses several layers of protection:
+
+1. **Source checks:** a blocklist of dangerous APIs and preprocessor tricks. This is easy to get around on its own, so the layers below are what actually protect the host.
+2. **Include allowlist:** the compiler's dependency output (`-M`) must list only the bot's own file and system headers. This stops `#include "/etc/passwd"`-style leaks through compile errors.
+3. **OS sandbox** for both compiling and running bots:
+   - **macOS:** `sandbox-exec`. No network, no file writes, and reads limited to the toolchain and system libraries.
+   - **Linux:** [bubblewrap](https://github.com/containers/bubblewrap) (`bwrap`), if installed. All namespaces are unshared (no network), and only `/usr` and `/lib*` are mounted, read-only.
+   - **Windows, or Linux without `bwrap`:** no sandbox. A warning is printed at startup.
+4. **Resource limits:** CPU time (`ulimit -t`) and, on Linux, memory (`ulimit -v`). Bots also get an empty environment and capped output.
+5. **Network exposure:** the server listens on `127.0.0.1` by default. CORS only allows the dashboard origin. Setting `API_TOKEN` requires a token for all uploads, deletes and matches.
+
+For a public deployment, set `BOT_SANDBOX=required` and `API_TOKEN`, and preferably run the whole server in a container or VM as well.
+
+### Configuration
+
+| Variable | Where | Default | Meaning |
+|---|---|---|---|
+| `PORT` | server | `3000` | HTTP port |
+| `HOST` | server | `127.0.0.1` | Interface to listen on (`0.0.0.0` exposes it to your network) |
+| `API_TOKEN` | server | *(unset)* | When set, uploads/updates/deletes, matches and socket connections need `Authorization: Bearer <token>` |
+| `CORS_ORIGIN` | server | `http://localhost:3001,http://127.0.0.1:3001` | Comma-separated origins allowed to call the API |
+| `BOT_SANDBOX` | server | `auto` | `auto` (use if available), `required` (refuse to start without one), `off` |
+| `CXX` | server | `g++` (Xcode `clang++` on macOS) | Compiler used for bots |
+| `BOT_STORE_FILE` | server | `server/runtime/bots/bots.json` | Where bot metadata is saved |
+| `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_SOCKET_URL` | dashboard | `http://localhost:3000` | Server address |
+| `NEXT_PUBLIC_API_TOKEN` | dashboard | *(unset)* | Must match `API_TOKEN`. Anyone who can open the dashboard can see it. |
 
 ---
 
@@ -232,15 +279,18 @@ Copy or adapt these; they’re valid for upload to the dashboard (single file, `
 | DELETE | `/api/bots/:id` | Delete bot. |
 | POST | `/api/matches/run` | Run match: `{ botIds[], numHands?, smallBlind?, bigBlind?, startingChips? }`. |
 
+POST/PUT/DELETE and match runs require `Authorization: Bearer <API_TOKEN>` when `API_TOKEN` is set.
+
 **Socket.IO (from dashboard):**
-- Emit `new_match` with `{ botIds, numHands, smallBlind, bigBlind, startingChips }`.
-- Listen for `MATCH_UPDATE` for live hand-by-hand and final results.
+- Connect with `auth: { token }` when `API_TOKEN` is set.
+- Emit `new_match` with `{ botIds, numHands, smallBlind, bigBlind, startingChips }`; the ack returns `{ matchId }` or `{ error }`.
+- Listen for `MATCH_UPDATE` for live hand-by-hand and final results. These are sent only to the socket that started the match. Other sockets can subscribe with `watch_match(matchId)`.
 
 ---
 
 ## Game Flow (Texas Hold'em)
 
-1. Blinds posted (small, big).  
+1. Blinds posted (small, big). Heads-up, the button posts the small blind, acts first pre-flop and last after the flop.  
 2. Hole cards dealt (2 per player).  
 3. Pre-flop betting.  
 4. Flop (3 community cards) + betting.  

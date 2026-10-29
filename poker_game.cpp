@@ -200,22 +200,26 @@ int PokerGame::bettingRound(int startingPlayer) {
                 
             case PlayerAction::RAISE:
                 {
-                    int totalBet = currentBet - players[currentPlayer]->getCurrentBet() + action.amount;
-                    if (action.amount >= minRaise) {
-                        int betAmount = players[currentPlayer]->bet(totalBet);
-                        std::cout << "raises to " << (players[currentPlayer]->getCurrentBet()) << std::endl;
-                        
-                        if (players[currentPlayer]->isAllIn()) {
-                            std::cout << players[currentPlayer]->getName() << " is all-in!" << std::endl;
-                        } else {
-                            currentBet = players[currentPlayer]->getCurrentBet();
-                            minRaise = action.amount;
+                    int raiseBy = action.amount;
+                    if (raiseBy < minRaise) {
+                        std::cout << "(raise below minimum of " << minRaise << ", raising the minimum) ";
+                        raiseBy = minRaise;
+                    }
+                    players[currentPlayer]->bet(callAmount + raiseBy);
+                    std::cout << "raises to " << players[currentPlayer]->getCurrentBet() << std::endl;
+                    if (players[currentPlayer]->isAllIn()) {
+                        std::cout << players[currentPlayer]->getName() << " is all-in!" << std::endl;
+                    }
+
+                    // A short all-in still raises the bet to match, but only a full raise reopens betting.
+                    if (players[currentPlayer]->getCurrentBet() > currentBet) {
+                        int raisedBy = players[currentPlayer]->getCurrentBet() - currentBet;
+                        currentBet = players[currentPlayer]->getCurrentBet();
+                        if (raisedBy >= minRaise) {
+                            minRaise = raisedBy;
                             lastRaiser = currentPlayer;
                             playersActed = 0;
                         }
-                    } else {
-                        std::cout << "Invalid raise amount. Minimum raise: " << minRaise << ". Folding..." << std::endl;
-                        activePlayers--;
                     }
                 }
                 break;

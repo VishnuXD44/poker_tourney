@@ -13,10 +13,18 @@ $(TARGET): $(OBJECTS)
 %.o: %.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+TEST_TARGET = tests/hand_evaluator_test
+
+$(TEST_TARGET): tests/hand_evaluator_test.cpp card.o hand_evaluator.o $(HEADERS)
+	$(CXX) $(CXXFLAGS) -o $@ tests/hand_evaluator_test.cpp card.o hand_evaluator.o
+
+test: $(TEST_TARGET)
+	./$(TEST_TARGET)
+
 clean:
-	rm -f $(OBJECTS) $(TARGET)
+	rm -f $(OBJECTS) $(TARGET) $(TEST_TARGET)
 
 run: $(TARGET)
 	./$(TARGET)
 
-.PHONY: all clean run
+.PHONY: all clean run test

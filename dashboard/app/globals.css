@@ -1,27 +1,86 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700&family=JetBrains+Mono:wght@400;600&family=Outfit:wght@400;500;600;700&display=swap');
-
+/* Palette taken from the card deck in public/cards. */
 :root {
-  --bg: #f6f5f3;
-  --surface: #ffffff;
-  --surface-alt: #fafaf9;
-  --gold: #b8860b;
-  --gold-light: #d4af37;
-  --gold-bright: #e8c547;
-  --navy: #1a2744;
-  --navy-muted: #2d3a5a;
-  --text: #1a2744;
-  --text-muted: #5c6577;
-  --border: #e2dfda;
-  --danger: #c53030;
-  --success: #276749;
+  --bg: #0e0f0f;
+  --surface: #090a0a; /* card face */
+  --ink: #f3f3ed; /* card ink */
+  --muted: #92958f;
+  --edge: #757a72; /* card offset edge */
+  --line: #2b2d2b;
+  --hi: #c6c9c1;
+  --danger: #d9776b;
+  color-scheme: dark;
 }
 
 body {
   background: var(--bg);
-  color: var(--text);
-  font-family: 'Outfit', system-ui, sans-serif;
+  color: var(--ink);
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+@layer components {
+  /* Same construction as a card: a face with an outlined edge offset behind it. */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    box-shadow: 4px 4px 0 0 var(--bg), 4px 4px 0 1px var(--edge);
+  }
+
+  .label {
+    @apply block text-[11px] uppercase tracking-[0.12em];
+    color: var(--muted);
+  }
+
+  .field {
+    @apply w-full mt-1.5 px-3 py-2 rounded bg-transparent text-sm outline-none transition-colors;
+    border: 1px solid var(--line);
+    color: var(--ink);
+  }
+  .field:focus {
+    border-color: var(--hi);
+  }
+  .field::placeholder {
+    color: #5d605b;
+  }
+
+  .btn {
+    @apply w-full py-2.5 rounded text-sm uppercase tracking-[0.14em] transition-colors;
+    border: 1px solid var(--hi);
+    color: var(--ink);
+    background: transparent;
+  }
+  .btn:hover:not(:disabled),
+  .btn:focus-visible {
+    background: var(--ink);
+    color: var(--surface);
+    outline: none;
+  }
+  .btn:disabled {
+    border-color: var(--line);
+    color: #5d605b;
+    cursor: not-allowed;
+  }
+
+  .muted {
+    color: var(--muted);
+  }
+}
+
+/* Thin, unobtrusive scrollbars for the logs. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
 }
