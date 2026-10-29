@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import Link from "next/link";
 import LiveTable from "@/components/LiveTable";
 import Leaderboard from "@/components/Leaderboard";
 import NewMatchForm from "@/components/NewMatchForm";
@@ -109,47 +108,30 @@ export default function DashboardPage() {
   const arena = ARENA === "server" ? server : browser;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
-      <a
-        href="#main-content"
-        className="absolute -top-12 left-4 px-3 py-2 bg-ink text-surface text-xs uppercase tracking-widest rounded z-50 focus:top-4 transition-[top]"
-      >
-        Skip to main content
-      </a>
-      <header className="flex flex-wrap items-end justify-between gap-4 mb-10 pb-5 border-b border-line">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">poker_tourney</h1>
-          <p className="text-xs text-muted mt-1">
-            texas hold&apos;em · {ARENA === "server" ? "c++ bot arena" : "build a bot, watch it play"}
+    <div className="px-4 sm:px-6 lg:px-10 py-6 sm:py-8">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 mb-6 sm:mb-8">
+        <h1 className="text-lg sm:text-xl font-bold tracking-tight">
+          bot arena <span className="text-muted font-normal text-xs sm:text-sm ml-2">{ARENA === "server" ? "c++ bots, live" : "build a bot, watch it play"}</span>
+        </h1>
+        {ARENA === "server" ? (
+          <p className="flex items-center gap-2 text-xs" role="status">
+            <span aria-hidden>{arena.connected ? "●" : "○"}</span>
+            <span className={arena.connected ? "text-ink" : "text-muted"}>{arena.connected ? "online" : "offline"}</span>
           </p>
-        </div>
-        <div className="flex items-center gap-6 text-xs">
-          <Link href="/table" className="text-muted hover:text-ink underline-offset-4 hover:underline">
-            play with friends →
-          </Link>
-          <Link href="/builder" className="text-muted hover:text-ink underline-offset-4 hover:underline">
-            strategy builder →
-          </Link>
-          {ARENA === "server" ? (
-            <p className="flex items-center gap-2" role="status">
-              <span aria-hidden>{arena.connected ? "●" : "○"}</span>
-              <span className={arena.connected ? "text-ink" : "text-muted"}>{arena.connected ? "online" : "offline"}</span>
-            </p>
-          ) : (
-            <p className="text-muted">runs in your browser</p>
-          )}
-        </div>
-      </header>
+        ) : (
+          <p className="text-xs text-muted">runs in your browser</p>
+        )}
+      </div>
 
-      <main id="main-content" className="grid gap-8 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+      <main id="main-content" className="grid gap-6 lg:gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_26rem]">
+        <div className="min-w-0">
           <LiveTable update={matchUpdate} />
         </div>
         <div className="space-y-8">
           <NewMatchForm bots={arena.bots} onRunMatch={arena.startMatch} disabled={!arena.connected} update={matchUpdate} />
           <Leaderboard update={matchUpdate} />
         </div>
-        <div className="lg:col-span-3">
+        <div className="lg:col-span-2">
           {ARENA === "server" ? (
             <BotUploadPanel
               apiUrl={API_URL}

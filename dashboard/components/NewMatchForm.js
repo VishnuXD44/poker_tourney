@@ -42,7 +42,7 @@ export default function NewMatchForm({ bots, onRunMatch, disabled, update }) {
   };
 
   const fields = [
-    { label: "hands", value: hands, set: setHands, fallback: 50, min: 10, max: 500 },
+    { label: "hands", value: hands, set: setHands, fallback: 50, min: 10, max: 10000 },
     { label: "small blind", value: sb, set: setSb, fallback: 10, min: 1 },
     { label: "big blind", value: bb, set: setBb, fallback: 20, min: 1 },
     { label: "stack", value: chips, set: setChips, fallback: 1000, min: 100 },

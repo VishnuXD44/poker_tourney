@@ -63,6 +63,7 @@ export class PokerTable {
     this.lastHand = null; // { number, board, events } of the last finished hand
     this.between = null; // { until, ready: Set, advance } between hands
     this.stopRequested = false;
+    this.rematchVotes = new Set(); // seat tokens that asked for a rematch after a game ended
 
     ctx.blockConcurrencyWhile(async () => {
       const saved = await ctx.storage.get("table");
@@ -124,6 +125,8 @@ export class PokerTable {
         if (seatIndex === -1 || this.phase === "playing") return;
         this.seats.splice(seatIndex, 1);
         this.sockets.set(ws, null);
+        this.rematchVotes.delete(token);
+        if (this.phase === "over" && this.maybeRematch()) return;
         return this.saveAndBroadcast();
       case "settings":
         if (!isHost || this.phase !== "lobby" || this.handNumber > 0) return;
@@ -140,13 +143,18 @@ export class PokerTable {
         this.stopRequested = true;
         this.between?.advance();
         return this.broadcast();
-      case "rematch":
-        if (!isHost || this.phase === "playing") return;
-        this.phase = "lobby";
-        this.handNumber = 0;
-        this.lastHand = null;
-        for (const s of this.seats) s.chips = this.settings.startingChips;
+      case "reset":
+        // Host, from the lobby: everyone back to the starting stack.
+        if (!isHost || this.phase !== "lobby") return;
+        this.resetChips();
         return this.saveAndBroadcast();
+      case "rematch":
+        // After a game: anyone seated can ask; it deals once every seat has asked.
+        if (seatIndex === -1 || this.phase !== "over") return;
+        if (msg.cancel) this.rematchVotes.delete(token);
+        else this.rematchVotes.add(token);
+        if (!this.maybeRematch()) this.broadcast();
+        return;
       case "next":
         if (seatIndex === -1 || !this.between) return;
         this.between.ready.add(token);
@@ -181,6 +189,20 @@ export class PokerTable {
     }
     this.authed.add(ws);
     this.sendView(ws);
+  }
+
+  resetChips() {
+    this.handNumber = 0;
+    this.lastHand = null;
+    for (const s of this.seats) s.chips = this.settings.startingChips;
+  }
+
+  /** Starts the rematch once every seat has voted for it. Returns true if it started. */
+  maybeRematch() {
+    if (this.seats.length < 2 || !this.seats.every((s) => this.rematchVotes.has(s.token))) return false;
+    this.resetChips();
+    this.runGame();
+    return true;
   }
 
   join(ws, msg) {
@@ -250,6 +272,7 @@ export class PokerTable {
   async runGame() {
     this.phase = "playing";
     this.stopRequested = false;
+    this.rematchVotes.clear();
     const { smallBlind, bigBlind, startingChips } = this.settings;
     const game = createGame(smallBlind, bigBlind, startingChips);
     for (const seat of this.seats) {
@@ -334,8 +357,9 @@ export class PokerTable {
         connected: connected.has(seat.token),
         turn: this.pending?.token === seat.token,
         ready: this.between ? this.between.ready.has(seat.token) : false,
-        // Only your own cards; everyone else's arrive in the showdown event.
-        cards: p && i === you ? p.holeCards.map((c) => c.str) : null,
+        rematch: this.rematchVotes.has(seat.token),
+        // Only your own cards (kept between hands); everyone else's arrive in the showdown event.
+        cards: game && i === you ? game.players[i].holeCards.map((c) => c.str) : null,
         inHand: p ? !p.sittingOut : false,
       };
     });

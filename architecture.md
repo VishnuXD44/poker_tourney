@@ -61,9 +61,14 @@ The JS `analyze` and the C++ prelude implement the same hand reading (starting-h
 
 - **`worker/pokerTable.js`** is a Durable Object, one per code (`idFromName`). It runs `server/game` with each player's `getAction` waiting on their WebSocket, so the deck and hole cards exist only there. Every socket gets its own view: your cards, everyone else's only via the showdown event.
 - **Seats** are claimed with a random token kept in the browser's localStorage (with the PIN, so returning players aren't asked again), so a refresh or dropped connection takes the same seat back. New seats open only between games.
-- **Between hands** the result shows for 12 s, or until every seat clicks "next hand".
+- **Between hands** the result shows for 12 s, or until every seat clicks "next hand". There's no hand limit: a game runs until one player has every chip.
+- **Rematch:** when a game ends, every screen shows the last hand and a rematch button. Anyone seated can ask; once every seat has, stacks reset and the next game deals immediately.
+- **Hand reading** (`lib/hands.js`): names hands in words, explains each result ("two pair beats a pair", kickers, split and side pots) using the engine's own evaluator, and finds your best five cards. It drives the "why" box after every hand (arena too) and the hand guide sidebar (`components/HandGuide.js`).
+- **Sound** (`lib/sounds.js`): effects synthesised with Web Audio, so no audio files. They're triggered by new log events, your turn and incoming chat; muting is saved per browser.
 - **Persistence:** seats, chips, button, hand count and chat are saved after every hand. Sockets use `accept()`, not hibernation, because a hand in progress is an in-memory promise; if the object restarts, the hand in progress is lost and the table reopens paused at the last finished hand.
 - **`worker/index.js`** routes `/api/table/<code>/ws` (same-origin upgrades only) to the object; `run_worker_first: ["/api/*"]` keeps every other path on static assets.
+
+Every page shares `components/NavBar.js`, mounted in the root layout.
 
 Test locally with `npx next build && npx wrangler dev`: `next dev` has no Worker, so tables don't connect there.
 

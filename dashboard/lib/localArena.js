@@ -27,7 +27,7 @@ export async function runLocalMatch(bots, options, onUpdate, signal) {
     onUpdate({ type: "MATCH_ERROR", error: "Need 2–9 bots" });
     return;
   }
-  const numHands = clamp(options.numHands, 10, 500, 50);
+  const numHands = clamp(options.numHands, 10, 10000, 50);
   const smallBlind = clamp(options.smallBlind, 1, 100000, 10);
   const bigBlind = clamp(options.bigBlind, smallBlind, 100000, 20);
   const startingChips = clamp(options.startingChips, 100, 1000000, 1000);

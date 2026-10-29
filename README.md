@@ -44,7 +44,7 @@ The **C++ engine** in the repo root (`poker_engine.exe` / `./poker_engine`) is s
 | **Game** | Texas Hold'em: blinds, pre-flop → flop → turn → river, full hand evaluation, side pots, all-in. |
 | **Hand eval** | All 21 five-card combinations from 7 cards; standard high-hand ranking. |
 | **Bots** | C++ only (for the web platform). Upload source; the server compiles and runs it inside an OS sandbox where available (see [Security](#security)). |
-| **Matches** | 2–9 bots, configurable hands (10–500), blinds, and starting stack. Live updates over Socket.IO. |
+| **Matches** | 2–9 bots, configurable hands (10–10,000), blinds, and starting stack. Live updates over Socket.IO. |
 | **Standalone** | CLI engine for testing strategies or driving with your own AI via the text protocol. |
 
 ---

@@ -23,6 +23,7 @@ function cardLabel(cardStr) {
 }
 
 const SIZES = {
+  xs: "h-9",
   sm: "h-14",
   md: "h-20",
   lg: "h-28",

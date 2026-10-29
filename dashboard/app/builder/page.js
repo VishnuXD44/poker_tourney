@@ -439,18 +439,12 @@ export default function BuilderPage() {
   const chipsIn = { call: s.toCall, raise: s.toCall + (result.amount || 0), "all-in": s.myChips }[result.action] || 0;
 
   return (
-    <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-8 sm:py-10">
-      <header className="flex flex-wrap items-end justify-between gap-4 mb-8 pb-5 border-b border-line">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">strategy builder</h1>
-          <p className="text-xs text-muted mt-1">wire up questions and moves · no c++ needed</p>
-        </div>
-        <Link href="/" className="text-xs text-muted hover:text-ink hover:underline underline-offset-4">
-          ← dashboard
-        </Link>
-      </header>
+    <div className="px-4 sm:px-6 lg:px-10 py-6 sm:py-8">
+      <h1 className="text-lg sm:text-xl font-bold tracking-tight mb-6">
+        strategy builder <span className="text-muted font-normal text-xs sm:text-sm ml-2">wire up questions and moves · no c++ needed</span>
+      </h1>
 
-      <main className="grid gap-6 lg:grid-cols-[220px_1fr_300px]">
+      <main id="main-content" className="grid gap-6 lg:grid-cols-[220px_1fr_300px] 2xl:grid-cols-[260px_1fr_360px]">
         {/* palette */}
         <aside className="space-y-6 lg:max-h-[calc(100vh-180px)] lg:overflow-y-auto lg:pr-1">
           <div>

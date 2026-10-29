@@ -77,6 +77,25 @@ body {
   }
 }
 
+/* The navbar's prompt cursor. */
+.nav-cursor {
+  display: inline-block;
+  width: 0.55em;
+  height: 1.1em;
+  background: var(--ink);
+  animation: nav-blink 1.1s steps(1) infinite;
+}
+@keyframes nav-blink {
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-cursor {
+    animation: none;
+  }
+}
+
 /* Thin, unobtrusive scrollbars for the logs. */
 * {
   scrollbar-width: thin;

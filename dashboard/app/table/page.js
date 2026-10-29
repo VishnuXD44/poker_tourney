@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import Panel from "@/components/Panel";
 import PlayingCard from "@/components/PlayingCard";
 import ChipStack from "@/components/Chips";
-import { describeEvent } from "@/components/LiveTable";
+import HandGuide from "@/components/HandGuide";
+import { describeEvent, WinReason } from "@/components/LiveTable";
+import { bestHand, describeHand } from "@/lib/hands";
+import { isMuted, play, setMuted, unlockAudio } from "@/lib/sounds";
 
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH || "";
 const CODE_RE = /^[a-z0-9]{6,16}$/;
@@ -331,54 +333,45 @@ function Lobby({ code, view, send, error }) {
   const isHost = view.you === 0;
   const ready = view.seats.filter((s) => s.chips > 0).length >= 2;
   const resuming = view.handNumber > 0;
-  const over = view.phase === "over";
-  const winner = over ? view.seats.find((s) => s.chips > 0) : null;
 
   return (
-    <Panel index="01" title={over ? "game over" : "lobby"} aside={`table ${code}`}>
-      <div className="space-y-6">
-        {over && (
-          <div className="text-center py-2">
-            <p className="label">after {view.handNumber} hands</p>
-            <p className="text-2xl font-bold mt-2">{winner?.name ?? "—"}</p>
-            <p className="text-xs text-muted mt-1">takes every chip</p>
+    <Panel index="01" title="lobby" aside={`table ${code}`}>
+      <div className="grid gap-8 md:grid-cols-2">
+        <div className="space-y-6">
+          <ShareLink code={code} />
+          <div>
+            <p className="label mb-3">seats</p>
+            <SeatList view={view} />
           </div>
-        )}
-        <ShareLink code={code} />
-        <div>
-          <p className="label mb-3">seats</p>
-          <SeatList view={view} />
         </div>
-        {!seated && <JoinForm code={code} view={view} send={send} error={error} />}
-        {seated && !over && (
-          <>
-            <Settings view={view} send={send} editable={isHost && !resuming} />
-            {isHost ? (
-              <button className="btn" disabled={!ready} onClick={() => send({ type: "start" })}>
-                {ready ? (resuming ? `resume from hand ${view.handNumber}` : "deal") : "waiting for a second player"}
-              </button>
-            ) : (
-              <p className="text-xs text-muted">waiting for {view.seats[0]?.name} to deal</p>
-            )}
-            {isHost && resuming && (
-              <button className="text-xs text-muted hover:text-ink underline underline-offset-4" onClick={() => send({ type: "rematch" })}>
-                reset everyone to {view.settings.startingChips.toLocaleString()} chips
-              </button>
-            )}
-          </>
-        )}
-        {seated && over && (isHost ? (
-          <button className="btn" onClick={() => send({ type: "rematch" })}>
-            rematch
-          </button>
-        ) : (
-          <p className="text-xs text-muted">waiting for {view.seats[0]?.name} to start a rematch</p>
-        ))}
-        {seated && !over && view.phase === "lobby" && (
-          <button className="text-xs text-muted hover:text-ink underline underline-offset-4" onClick={() => send({ type: "leave" })}>
-            leave seat
-          </button>
-        )}
+        <div className="space-y-6">
+          {!seated && <JoinForm code={code} view={view} send={send} error={error} />}
+          {seated && (
+            <>
+              <Settings view={view} send={send} editable={isHost && !resuming} />
+              {isHost ? (
+                <button className="btn" disabled={!ready} onClick={() => send({ type: "start" })}>
+                  {ready ? (resuming ? `resume from hand ${view.handNumber}` : "deal") : "waiting for a second player"}
+                </button>
+              ) : (
+                <p className="text-xs text-muted">waiting for {view.seats[0]?.name} to deal</p>
+              )}
+              <div className="flex flex-wrap gap-x-6 gap-y-2">
+                {isHost && resuming && (
+                  <button className="text-xs text-muted hover:text-ink underline underline-offset-4" onClick={() => send({ type: "reset" })}>
+                    reset everyone to {view.settings.startingChips.toLocaleString()} chips
+                  </button>
+                )}
+                <button className="text-xs text-muted hover:text-ink underline underline-offset-4" onClick={() => send({ type: "leave" })}>
+                  leave seat
+                </button>
+              </div>
+            </>
+          )}
+          <p className="text-[11px] text-muted leading-relaxed">
+            No hand limit: play until one player has every chip, or pause and pick it up later. Chips are saved after every hand.
+          </p>
+        </div>
       </div>
     </Panel>
   );
@@ -410,16 +403,17 @@ function Badge({ children, strong }) {
 
 /** One player: name, stack, bet this street, and cards (yours, shown at showdown, or backs). */
 function Seat({ seat, shown, won, me, handName }) {
-  const cards = me ? seat.cards : shown;
+  // Your own cards while you have them; after a game ends, the showdown reveal.
+  const cards = me && seat.cards?.length ? seat.cards : shown;
   const holding = seat.inHand && !seat.folded;
   return (
-    <div className={`rounded p-3 border ${seat.turn || won ? "border-hi" : "border-line"} ${seat.folded ? "opacity-50" : ""}`}>
+    <div className={`rounded p-3 sm:p-4 border ${seat.turn || won ? "border-hi" : "border-line"} ${seat.folded ? "opacity-50" : ""}`}>
       <div className="flex items-center justify-between gap-2 mb-2">
         <p className="text-sm truncate">
           {seat.name}
           {me && <span className="text-muted"> (you)</span>}
         </p>
-        <div className="flex gap-1 flex-shrink-0">
+        <div className="flex flex-wrap justify-end gap-1">
           {seat.dealer && <Badge>d</Badge>}
           {seat.turn && <Badge strong>to act</Badge>}
           {won && <Badge strong>win</Badge>}
@@ -434,10 +428,10 @@ function Seat({ seat, shown, won, me, handName }) {
             ? cards.map((c) => <PlayingCard key={c} card={c} size={me ? "lg" : "md"} />)
             : holding && [0, 1].map((i) => <PlayingCard key={i} faceDown size={me ? "lg" : "md"} />)}
         </div>
-        <div className="text-right text-xs">
-          <p className="tabular-nums">{seat.chips.toLocaleString()}</p>
+        <div className="text-right text-xs min-w-0">
+          <p className="tabular-nums text-sm">{seat.chips.toLocaleString()}</p>
           {seat.bet > 0 && <p className="text-muted tabular-nums">bet {seat.bet.toLocaleString()}</p>}
-          {handName && <p className="text-muted">{handName}</p>}
+          {handName && <p className="text-ink mt-1">{handName}</p>}
         </div>
       </div>
     </div>
@@ -451,25 +445,29 @@ function Actions({ prompt, pot, send }) {
   useEffect(() => setTo(minTo), [minTo]);
   const clampTo = (v) => Math.max(minTo, Math.min(prompt.maxRaiseTo, Math.round(v) || minTo));
   const potRaise = clampTo(prompt.currentBet + pot + prompt.toCall);
+  const act = (action, extra) => send({ type: "action", action, ...extra });
 
   return (
-    <div className="mt-6 pt-5 border-t border-line space-y-4">
-      <p className="label">your move</p>
+    // Sticks to the bottom of the screen on phones so the buttons stay in reach.
+    <div className="sticky bottom-0 z-10 -mx-5 sm:-mx-6 mt-6 px-5 sm:px-6 pt-4 pb-5 bg-surface border-t border-line space-y-4 lg:static lg:mx-auto lg:px-0 lg:pb-0 lg:max-w-2xl">
+      <p className="label">
+        your move{prompt.toCall > 0 && <span className="normal-case tracking-normal"> · {prompt.toCall.toLocaleString()} to call</span>}
+      </p>
       <div className="grid grid-cols-3 gap-2">
-        <button className="btn" onClick={() => send({ type: "action", action: "fold" })}>
+        <button className="btn" onClick={() => act("fold")}>
           fold
         </button>
         {prompt.toCall > 0 ? (
-          <button className="btn" onClick={() => send({ type: "action", action: "call" })}>
+          <button className="btn" onClick={() => act("call")}>
             call {prompt.toCall.toLocaleString()}
           </button>
         ) : (
-          <button className="btn" onClick={() => send({ type: "action", action: "check" })}>
+          <button className="btn" onClick={() => act("check")}>
             check
           </button>
         )}
-        <button className="btn" onClick={() => send({ type: "action", action: "all-in" })}>
-          all-in
+        <button className="btn" onClick={() => act("all-in")}>
+          all-in {prompt.myChips.toLocaleString()}
         </button>
       </div>
       {canRaise && minTo < prompt.maxRaiseTo && (
@@ -480,13 +478,13 @@ function Actions({ prompt, pot, send }) {
             min={minTo}
             max={prompt.maxRaiseTo}
             step={1}
-            value={to}
+            value={clampTo(to)}
             onChange={(e) => setTo(clampTo(e.target.value))}
             aria-label="Raise to"
           />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <input
-              className="field !mt-0 tabular-nums"
+              className="field !mt-0 !w-28 tabular-nums"
               type="number"
               inputMode="numeric"
               value={to}
@@ -496,10 +494,13 @@ function Actions({ prompt, pot, send }) {
               onBlur={() => setTo(clampTo(to))}
               aria-label="Raise to amount"
             />
+            <button className="btn !w-auto px-3 text-xs" onClick={() => setTo(clampTo(prompt.currentBet + Math.round((pot + prompt.toCall) / 2)))}>
+              ½ pot
+            </button>
             <button className="btn !w-auto px-3 text-xs" onClick={() => setTo(potRaise)}>
               pot
             </button>
-            <button className="btn !w-auto px-4" onClick={() => send({ type: "action", action: "raise", to: clampTo(to) })}>
+            <button className="btn !w-auto flex-1 px-4" onClick={() => act("raise", { to: clampTo(to) })}>
               {prompt.currentBet > 0 ? "raise" : "bet"} to {clampTo(to).toLocaleString()}
             </button>
           </div>
@@ -536,68 +537,130 @@ function HandLog({ events }) {
   );
 }
 
-function Table({ code, view, send }) {
+/** Shown on every screen when someone has all the chips: anyone seated can ask for a rematch. */
+function GameOver({ view, send }) {
+  const winner = view.seats.find((s) => s.chips > 0);
+  const me = view.seats[view.you];
+  const asked = view.seats.filter((s) => s.rematch);
+  const waitingOn = view.seats.filter((s) => !s.rematch);
+
+  return (
+    <div className="mt-6 pt-6 border-t border-line text-center space-y-4">
+      <div>
+        <p className="label">game over · {view.handNumber} hands</p>
+        <p className="text-2xl font-bold mt-2">{winner?.name ?? "—"}</p>
+        <p className="text-xs text-muted mt-1">takes every chip</p>
+      </div>
+      {me && (
+        <div className="max-w-sm mx-auto space-y-2">
+          {me.rematch ? (
+            <>
+              <button className="btn" disabled>
+                rematch requested
+              </button>
+              <p className="text-xs text-muted">
+                waiting for {waitingOn.map((s) => s.name).join(" & ")} ·{" "}
+                <button className="underline underline-offset-4 hover:text-ink" onClick={() => send({ type: "rematch", cancel: true })}>
+                  cancel
+                </button>
+              </p>
+            </>
+          ) : (
+            <>
+              <button className="btn" onClick={() => send({ type: "rematch" })}>
+                {asked.length ? "accept rematch" : "request rematch"}
+              </button>
+              {asked.length > 0 && (
+                <p className="text-xs text-ink">
+                  {asked.map((s) => s.name).join(" & ")} {asked.length === 1 ? "wants" : "want"} a rematch
+                </p>
+              )}
+            </>
+          )}
+          <p className="text-[11px] text-muted">
+            everyone goes back to {view.settings.startingChips.toLocaleString()} chips and the next game deals right away.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Table({ view, send }) {
   const showdown = view.log.find((ev) => ev.type === "showdown");
   const shown = new Map((showdown?.hands || []).map((h) => [h.name, h]));
   const winners = new Set(view.log.filter((ev) => ev.type === "win").map((ev) => ev.player));
   const finished = Boolean(view.lastHand);
+  const over = view.phase === "over";
   const me = view.seats[view.you];
   // Your seat goes last, closest to the action buttons.
   const others = view.seats.map((s, i) => [s, i]).filter(([, i]) => i !== view.you);
   const seatProps = (s) => ({
     shown: shown.get(s.name)?.cards,
-    handName: shown.get(s.name)?.handName?.toLowerCase(),
+    handName: shown.get(s.name) ? describeHand(shown.get(s.name).hv) : undefined,
     won: finished && winners.has(s.name),
   });
+  const myLive = me?.cards?.length && !finished ? bestHand(me.cards, view.board) : null;
   const won = view.log.filter((ev) => ev.type === "win").reduce((sum, ev) => sum + ev.amount, 0);
+  const pot = view.pot || won;
 
   return (
-    <Panel index="01" title="table" aside={`hand ${String(view.handNumber).padStart(3, "0")} · ${view.settings.smallBlind}/${view.settings.bigBlind}`}>
-      <div className="grid gap-3 sm:grid-cols-2">
+    <Panel index="01" title="table" aside={`hand ${String(view.handNumber).padStart(3, "0")} · blinds ${view.settings.smallBlind}/${view.settings.bigBlind}`}>
+      <div className={`grid gap-3 ${others.length > 1 ? "sm:grid-cols-2 2xl:grid-cols-3" : "max-w-md mx-auto"}`}>
         {others.map(([s, i]) => (
           <Seat key={i} seat={s} {...seatProps(s)} />
         ))}
       </div>
 
-      <div className="my-8">
+      <div className="my-6 sm:my-10">
         <Board cards={view.board} />
         <div className="mt-5 flex flex-col items-center gap-2 min-h-[4.5rem]">
-          {(view.pot || won) > 0 && <ChipStack amount={view.pot || won} size={36} maxPiles={5} />}
-          {(view.pot || won) > 0 && (
+          {pot > 0 && <ChipStack amount={pot} size={36} maxPiles={5} />}
+          {pot > 0 && (
             <p className="text-xs">
-              <span className="label inline mr-2">pot</span>
-              <span className="tabular-nums">{(view.pot || won).toLocaleString()}</span>
+              <span className="label inline mr-2">{finished ? "won" : "pot"}</span>
+              <span className="tabular-nums">{pot.toLocaleString()}</span>
             </p>
           )}
         </div>
       </div>
 
-      {me && <Seat seat={me} me {...seatProps(me)} />}
+      {me && (
+        <div className="max-w-md mx-auto">
+          <Seat seat={me} me {...seatProps(me)} handName={seatProps(me).handName || (myLive && !me.folded ? describeHand(myLive.hv) : undefined)} />
+        </div>
+      )}
 
       {view.prompt && <Actions prompt={view.prompt} pot={view.pot} send={send} />}
       {!view.prompt && !finished && me && (
         <p className="mt-5 text-xs text-muted text-center">
-          {view.seats.find((s) => s.turn) ? `waiting for ${view.seats.find((s) => s.turn).name}` : "dealing…"}
+          {view.seats.find((s) => s.turn) ? `waiting for ${view.seats.find((s) => s.turn).name}…` : "dealing…"}
         </p>
       )}
 
       {finished && (
-        <div className="mt-6 pt-5 border-t border-line flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm">
-            {[...winners].join(" & ") || "—"} <span className="text-muted">wins {won.toLocaleString()}</span>
-          </p>
-          {view.between && me && (
-            <button className="btn !w-auto px-4" disabled={me.ready} onClick={() => send({ type: "next" })}>
-              {me.ready ? "waiting…" : "next hand"} <Countdown until={view.between.until} />
-            </button>
+        <div className="mt-6 space-y-3">
+          <WinReason events={view.log} />
+          {!over && (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm">
+                {[...winners].join(" & ") || "—"} <span className="text-muted">wins {won.toLocaleString()}</span>
+              </p>
+              {view.between && me && (
+                <button className="btn !w-auto px-4" disabled={me.ready} onClick={() => send({ type: "next" })}>
+                  {me.ready ? "waiting…" : "next hand"} <Countdown until={view.between.until} />
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}
+      {over && <GameOver view={view} send={send} />}
       {view.stopping && <p className="mt-3 text-xs text-muted">pausing after this hand</p>}
 
       <HandLog events={view.log} />
 
-      {view.you === 0 && !view.stopping && (
+      {view.you === 0 && !view.stopping && !over && (
         <button className="mt-6 text-xs text-muted hover:text-ink underline underline-offset-4" onClick={() => send({ type: "pause" })}>
           pause after this hand
         </button>
@@ -639,6 +702,62 @@ function Chat({ view, send }) {
   );
 }
 
+// ---- sound -----------------------------------------------------------------------------
+
+const ACTION_SOUND = { fold: "fold", check: "check", call: "chip", raise: "raise", "all-in": "allin" };
+
+/**
+ * Plays a sound for each new thing that happens at the table: the deal, each action, each
+ * street, the result, your turn and incoming chat. Nothing plays for the state you load into.
+ */
+function useTableSounds(view) {
+  const prev = useRef(null);
+  useEffect(() => {
+    if (!view) return;
+    const before = prev.current;
+    const now = { hand: view.handNumber, len: view.log.length, prompt: Boolean(view.prompt), chat: view.chat.length };
+    prev.current = now;
+    if (!before) return;
+
+    const fresh = now.hand !== before.hand ? view.log : view.log.slice(before.len);
+    const queue = [];
+    for (const ev of fresh) {
+      if (ev.type === "hand_start") queue.push("deal");
+      else if (ev.type === "street") queue.push("card");
+      else if (ev.type === "action" && ACTION_SOUND[ev.action]) queue.push(ACTION_SOUND[ev.action]);
+    }
+    const me = view.seats[view.you];
+    if (fresh.some((ev) => ev.type === "win") && me) {
+      queue.push(fresh.some((ev) => ev.type === "win" && ev.player === me.name) ? "win" : "lose");
+    }
+    if (now.prompt && !before.prompt) queue.push("turn");
+    const last = view.chat[view.chat.length - 1];
+    if (now.chat > before.chat && last && last.name !== me?.name) queue.push("chat");
+
+    const timers = queue.map((name, i) => setTimeout(() => play(name), i * 160));
+    return () => timers.forEach(clearTimeout);
+  }, [view]);
+}
+
+function SoundToggle() {
+  const [muted, setMutedState] = useState(false);
+  useEffect(() => setMutedState(isMuted()), []);
+  return (
+    <button
+      className="text-xs text-muted hover:text-ink"
+      aria-pressed={!muted}
+      onClick={() => {
+        unlockAudio();
+        setMuted(!muted);
+        setMutedState(!muted);
+        if (muted) setTimeout(() => play("chip"), 30);
+      }}
+    >
+      <span aria-hidden>♪</span> sound {muted ? "off" : "on"}
+    </button>
+  );
+}
+
 // ---- page ------------------------------------------------------------------------------
 
 export default function TablePage() {
@@ -648,6 +767,18 @@ export default function TablePage() {
     setCode(CODE_RE.test(room) ? room : null);
   }, []);
   const { view, locked, status, error, send, unlock } = useTable(code);
+  useTableSounds(view);
+
+  // Browsers only allow audio after a user gesture.
+  useEffect(() => {
+    const unlockOnce = () => unlockAudio();
+    window.addEventListener("pointerdown", unlockOnce);
+    window.addEventListener("keydown", unlockOnce);
+    return () => {
+      window.removeEventListener("pointerdown", unlockOnce);
+      window.removeEventListener("keydown", unlockOnce);
+    };
+  }, []);
 
   // Flag your turn in the tab title, for when the table is in a background tab.
   const myTurn = Boolean(view?.prompt);
@@ -655,19 +786,17 @@ export default function TablePage() {
     document.title = myTurn ? "● your turn · poker_tourney" : "play with friends · poker_tourney";
   }, [myTurn]);
 
-  const playing = view?.phase === "playing" && view.handNumber > 0;
+  const atTable = view && view.phase !== "lobby" && view.handNumber > 0;
+  const me = view?.seats[view.you];
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
-      <header className="flex flex-wrap items-end justify-between gap-4 mb-10 pb-5 border-b border-line">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">poker_tourney</h1>
-          <p className="text-xs text-muted mt-1">texas hold&apos;em · play with friends</p>
-        </div>
-        <div className="flex items-center gap-6 text-xs">
-          <Link href="/" className="text-muted hover:text-ink underline-offset-4 hover:underline">
-            ← bot arena
-          </Link>
+    <div className="px-4 sm:px-6 lg:px-10 py-6 sm:py-8">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 mb-6 sm:mb-8">
+        <h1 className="text-lg sm:text-xl font-bold tracking-tight">
+          play with friends <span className="text-muted font-normal text-xs sm:text-sm ml-2">private texas hold&apos;em tables</span>
+        </h1>
+        <div className="flex items-center gap-5 text-xs">
+          {code && view && <SoundToggle />}
           {code && (
             <p className="flex items-center gap-2" role="status">
               <span aria-hidden>{status === "online" ? "●" : "○"}</span>
@@ -675,25 +804,29 @@ export default function TablePage() {
             </p>
           )}
         </div>
-      </header>
+      </div>
 
-      <main>
+      <main id="main-content">
         {code === null && <Landing />}
         {code && locked && <Unlock code={code} locked={locked} error={error} unlock={unlock} />}
         {code && !locked && !view && <p className="text-xs text-muted">connecting to table {code}…</p>}
         {code && !locked && view && (
-          <div className="grid gap-8 lg:grid-cols-3">
-            <div className="lg:col-span-2">
-              {playing ? <Table code={code} view={view} send={send} /> : <Lobby code={code} view={view} send={send} error={error} />}
-              {playing && view.you === -1 && <p className="mt-4 text-xs text-muted">you&apos;re watching. you can take a seat once this game ends.</p>}
+          // Phones: table, then seats and chat, then the guide. lg: guide moves under chat. xl: guide on the left.
+          <div className="grid gap-6 lg:gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[18rem_minmax(0,1fr)_20rem] 2xl:grid-cols-[20rem_minmax(0,1fr)_22rem] items-start">
+            <div className="min-w-0 lg:col-start-1 lg:row-start-1 lg:row-span-2 xl:col-start-2">
+              {atTable ? <Table view={view} send={send} /> : <Lobby code={code} view={view} send={send} error={error} />}
+              {atTable && view.you === -1 && <p className="mt-4 text-xs text-muted">you&apos;re watching. you can take a seat once this game ends.</p>}
             </div>
-            <div className="space-y-8">
-              {playing && (
+            <div className="space-y-6 lg:space-y-8 lg:col-start-2 lg:row-start-1 xl:col-start-3">
+              {atTable && (
                 <Panel title="seats" aside={`table ${code}`}>
                   <SeatList view={view} />
                 </Panel>
               )}
               <Chat view={view} send={send} />
+            </div>
+            <div className="lg:col-start-2 lg:row-start-2 xl:col-start-1 xl:row-start-1 xl:row-span-2 xl:sticky xl:top-16">
+              <HandGuide myCards={atTable ? me?.cards : null} board={atTable ? view.board : []} />
             </div>
           </div>
         )}

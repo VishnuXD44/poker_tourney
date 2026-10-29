@@ -3,6 +3,7 @@
 import Panel from "./Panel";
 import PlayingCard from "./PlayingCard";
 import ChipStack from "./Chips";
+import { explainHand } from "@/lib/hands";
 
 const BOARD_SIZE = 5;
 
@@ -65,6 +66,22 @@ function Showdown({ event }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** Why the last hand went the way it did, in plain words. */
+export function WinReason({ events, className = "" }) {
+  const lines = explainHand(events);
+  if (!lines.length) return null;
+  return (
+    <div className={`rounded border border-line px-3 py-2.5 ${className}`}>
+      <p className="label mb-1.5">why</p>
+      {lines.map((line, i) => (
+        <p key={i} className="text-xs leading-relaxed">
+          {line}
+        </p>
+      ))}
     </div>
   );
 }
@@ -148,6 +165,7 @@ export default function LiveTable({ update }) {
       </div>
       <Pot events={lastHandEvents} />
       <Showdown event={lastHandEvents.find((ev) => ev.type === "showdown")} />
+      <WinReason events={lastHandEvents} className="mt-4" />
       <EventLog events={lastHandEvents} />
     </Panel>
   );
