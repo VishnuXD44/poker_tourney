@@ -2,6 +2,8 @@
 
 **A Texas Hold'em platform for building and pitting C++ poker bots—with a standalone engine, Node.js game server, and real-time web dashboard.**
 
+> **Live at [bevishnu.com/poker](https://bevishnu.com/poker)** (bot arena, strategy builder, private multiplayer tables). How it's hosted, deployed and fixed: **[HOSTING.md](HOSTING.md)**. Code internals: [architecture.md](architecture.md).
+
 ---
 
 ## What This Is
