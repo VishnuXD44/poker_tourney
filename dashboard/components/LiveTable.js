@@ -2,6 +2,7 @@
 
 import Panel from "./Panel";
 import PlayingCard from "./PlayingCard";
+import ChipStack from "./Chips";
 
 const BOARD_SIZE = 5;
 
@@ -12,6 +13,21 @@ function Board({ cards }) {
       {Array.from({ length: BOARD_SIZE }, (_, i) => (
         <PlayingCard key={i} card={cards[i]} faceDown={!cards[i]} size="board" />
       ))}
+    </div>
+  );
+}
+
+/** Chips won in the last hand (main and side pots together). */
+function Pot({ events }) {
+  const pot = events.reduce((sum, ev) => sum + (ev.type === "win" ? ev.amount || 0 : 0), 0);
+  if (!pot) return null;
+  return (
+    <div className="mt-6 flex flex-col items-center gap-2">
+      <ChipStack amount={pot} size={44} maxPiles={5} />
+      <p className="text-xs">
+        <span className="label inline mr-2">pot</span>
+        <span className="tabular-nums">{pot.toLocaleString()}</span>
+      </p>
     </div>
   );
 }
@@ -107,12 +123,19 @@ export default function LiveTable({ update }) {
   }
 
   if (type === "MATCH_END") {
+    const winnerChips = update.chipCounts?.find((p) => p.name === update.winner)?.chips ?? 0;
     return (
       <Panel index="01" title="live table" aside={matchId}>
         <div className="py-6 text-center">
           <p className="label">match finished · {update.numHandsPlayed} hands</p>
           <p className="text-2xl font-bold mt-3">{update.winner ?? "—"}</p>
           <p className="text-xs text-muted mt-1">takes the table</p>
+          {winnerChips > 0 && (
+            <div className="mt-6 flex flex-col items-center gap-2">
+              <ChipStack amount={winnerChips} size={56} maxPiles={5} />
+              <p className="text-xs tabular-nums">{winnerChips.toLocaleString()} chips</p>
+            </div>
+          )}
         </div>
       </Panel>
     );
@@ -123,6 +146,7 @@ export default function LiveTable({ update }) {
       <div className="pt-2">
         <Board cards={communityCards} />
       </div>
+      <Pot events={lastHandEvents} />
       <Showdown event={lastHandEvents.find((ev) => ev.type === "showdown")} />
       <EventLog events={lastHandEvents} />
     </Panel>

@@ -84,3 +84,38 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
 }
+
+/* Strategy builder canvas: dotted grid that pans with the graph. */
+.canvas-grid {
+  background-color: var(--bg);
+  background-image: radial-gradient(circle, var(--line) 1px, transparent 1px);
+  background-size: 24px 24px;
+  touch-action: none;
+}
+
+.node {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 3px 3px 0 0 var(--bg), 3px 3px 0 1px var(--edge);
+}
+
+.node-select {
+  @apply bg-transparent text-ink rounded px-1 outline-none cursor-pointer;
+  border: 1px dashed var(--edge);
+}
+.node-select:focus {
+  border-color: var(--hi);
+}
+.node-select option {
+  background: var(--surface);
+}
+
+.port {
+  @apply absolute w-3 h-3 rounded-full -translate-x-1/2 -translate-y-1/2;
+  background: var(--surface);
+  border: 1px solid var(--hi);
+}
+.port:hover {
+  background: var(--ink);
+}

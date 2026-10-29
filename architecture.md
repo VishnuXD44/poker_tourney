@@ -38,3 +38,12 @@ The standalone C++ engine in the repo root is a separate terminal game. The serv
 3. **Compile** in a temporary job directory, inside the sandbox, with CPU and memory limits. Compiler errors have local paths removed and are truncated.
 4. **Warm up:** run the bot once so slow first-launch checks don't count against its first in-game decision.
 5. **Run:** each decision spawns the sandboxed binary with an empty environment, a 500 ms timeout and a 4 KB output cap. Anything other than a valid action counts as a fold.
+
+## Strategy builder (`dashboard/app/builder`)
+
+A drag-and-drop editor at `/builder` for players who don't write C++. A strategy is a graph of question blocks (yes/no) and move blocks. `dashboard/lib/strategy.js` holds:
+
+- **`decide`:** walks the graph in JS for the "try a hand" panel and highlights the path taken.
+- **`generateCpp`:** emits one C++ function per reachable block plus a fixed hand-analysis prelude, then uploads it through `POST /api/bots` like any other bot. Block params are whitelisted before they reach the source.
+
+The JS `analyze` and the C++ prelude implement the same hand reading (starting-hand tier, made hand, draws, rough equity) and must change together. Open branches fall back to check / fold. The graph is saved in `localStorage`.

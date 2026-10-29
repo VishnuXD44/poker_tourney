@@ -1,17 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import { io } from "socket.io-client";
 import LiveTable from "@/components/LiveTable";
 import Leaderboard from "@/components/Leaderboard";
 import NewMatchForm from "@/components/NewMatchForm";
 import BotUploadPanel from "@/components/BotUploadPanel";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3000";
-// Must match the server's API_TOKEN when one is set. Note it is visible to anyone who can load the dashboard.
-const API_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN || "";
-const AUTH_HEADERS = API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {};
+import { API_URL, SOCKET_URL, API_TOKEN, AUTH_HEADERS } from "@/lib/api";
 
 export default function DashboardPage() {
   const [bots, setBots] = useState([]);
@@ -74,10 +71,15 @@ export default function DashboardPage() {
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">poker_tourney</h1>
           <p className="text-xs text-muted mt-1">texas hold&apos;em · c++ bot arena</p>
         </div>
-        <p className="text-xs flex items-center gap-2" role="status">
-          <span aria-hidden>{connected ? "●" : "○"}</span>
-          <span className={connected ? "text-ink" : "text-muted"}>{connected ? "online" : "offline"}</span>
-        </p>
+        <div className="flex items-center gap-6 text-xs">
+          <Link href="/builder" className="text-muted hover:text-ink underline-offset-4 hover:underline">
+            strategy builder →
+          </Link>
+          <p className="flex items-center gap-2" role="status">
+            <span aria-hidden>{connected ? "●" : "○"}</span>
+            <span className={connected ? "text-ink" : "text-muted"}>{connected ? "online" : "offline"}</span>
+          </p>
+        </div>
       </header>
 
       <main id="main-content" className="grid gap-8 lg:grid-cols-3">
