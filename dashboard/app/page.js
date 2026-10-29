@@ -124,6 +124,9 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-6 text-xs">
+          <Link href="/table" className="text-muted hover:text-ink underline-offset-4 hover:underline">
+            play with friends →
+          </Link>
           <Link href="/builder" className="text-muted hover:text-ink underline-offset-4 hover:underline">
             strategy builder →
           </Link>

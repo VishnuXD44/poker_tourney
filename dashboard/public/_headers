@@ -1,8 +1,9 @@
 # Cloudflare static-asset headers for the poker-dashboard Worker. Paths are as this
 # Worker sees them: bevishnu.com strips the /poker prefix before forwarding.
-# cloudflareinsights.com is the Web Analytics beacon the bevishnu.com zone injects.
+# cloudflareinsights.com is the Web Analytics beacon the bevishnu.com zone injects. The wss:
+# sources are the multiplayer table sockets; older Safari doesn't treat 'self' as covering wss.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://cloudflareinsights.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' wss://bevishnu.com wss://www.bevishnu.com https://cloudflareinsights.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   Strict-Transport-Security: max-age=31536000
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY

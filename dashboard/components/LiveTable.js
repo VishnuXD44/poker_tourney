@@ -70,7 +70,7 @@ function Showdown({ event }) {
 }
 
 /** [tag, text] for a log line; the tag is blank for actions so streets stand out. */
-function describeEvent(ev) {
+export function describeEvent(ev) {
   switch (ev.type) {
     case "hand_start": return ["deal", `sb ${ev.sb} · bb ${ev.bb}`];
     case "street": return [ev.street, (ev.cards || []).join(" ")];

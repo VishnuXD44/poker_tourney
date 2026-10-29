@@ -55,9 +55,21 @@ The JS `analyze` and the C++ prelude implement the same hand reading (starting-h
 - **Server** (set, as in `dashboard/.env.development`): the C++ arena described above, with uploads, compiling and matches on the game server.
 - **Browser** (unset, as in the public build): matches run on the page via `lib/localArena.js`, which drives the same engine (`server/game`, imported through `experimental.externalDir`) with builder strategies as the players. Bots are the house bots (the builder templates) plus strategies the visitor saved, kept in their browser's localStorage (`lib/myBots.js`). No visitor code runs anywhere, and there is no backend to host.
 
+## Multiplayer tables (`dashboard/app/table`, `dashboard/worker`)
+
+`/table` is regular Hold'em between people. Opening a table makes an 8-character code; the invite link is `/table?room=<code>`. Tables are private: whoever opens one chooses a PIN (4–12 letters or digits), and a socket receives nothing, not even the seat list, until it sends that PIN. The link finds the table; the PIN, sent separately, gets you in. After 10 wrong PINs in 10 minutes the table refuses all PINs for the rest of that window; people already in stay connected. Up to six seats; the first person seated is the host, who sets stack and blinds, deals, pauses and starts rematches.
+
+- **`worker/pokerTable.js`** is a Durable Object, one per code (`idFromName`). It runs `server/game` with each player's `getAction` waiting on their WebSocket, so the deck and hole cards exist only there. Every socket gets its own view: your cards, everyone else's only via the showdown event.
+- **Seats** are claimed with a random token kept in the browser's localStorage (with the PIN, so returning players aren't asked again), so a refresh or dropped connection takes the same seat back. New seats open only between games.
+- **Between hands** the result shows for 12 s, or until every seat clicks "next hand".
+- **Persistence:** seats, chips, button, hand count and chat are saved after every hand. Sockets use `accept()`, not hibernation, because a hand in progress is an in-memory promise; if the object restarts, the hand in progress is lost and the table reopens paused at the last finished hand.
+- **`worker/index.js`** routes `/api/table/<code>/ws` (same-origin upgrades only) to the object; `run_worker_first: ["/api/*"]` keeps every other path on static assets.
+
+Test locally with `npx next build && npx wrangler dev`: `next dev` has no Worker, so tables don't connect there.
+
 ## Hosting at bevishnu.com/poker
 
-`npm run build:site` (in `dashboard/`) builds a browser-mode static export into `dashboard/out/` with `BASE_PATH=/poker`; `npm run deploy` builds and uploads it as the `poker-dashboard` Worker (`dashboard/wrangler.jsonc`). That Worker has no public URL of its own: the bevishnu.com Worker (separate repo) forwards `/poker/*` to it through a service binding with the prefix stripped, so deploy this Worker first.
+`npm run build:site` (in `dashboard/`) builds a browser-mode static export into `dashboard/out/` with `BASE_PATH=/poker`; `npm run deploy` builds and uploads it as the `poker-dashboard` Worker (`dashboard/wrangler.jsonc`). The same Worker hosts the multiplayer Durable Objects. That Worker has no public URL of its own: the bevishnu.com Worker (separate repo) forwards `/poker/*` to it through a service binding with the prefix stripped, so deploy this Worker first.
 
 - `public/_headers` sets the security headers (CSP, HSTS, nosniff, frame and permissions policies) and caches `/_next/static/*` forever (the filenames are content-hashed).
 - JetBrains Mono comes from `next/font` and is bundled at build time, so the page makes no third-party requests and the CSP can stay `'self'`. `'unsafe-inline'` scripts are needed for Next's inline bootstrap in a static export.

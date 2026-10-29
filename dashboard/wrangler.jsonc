@@ -7,10 +7,21 @@
   // bevishnu.com reaches it through a service binding and serves it at /poker.
   "workers_dev": false,
   "preview_urls": false,
+
+  // The script only runs for /api/* (multiplayer table sockets); the rest is static assets.
+  "main": "worker/index.js",
   "assets": {
     "directory": "./out",
-    "not_found_handling": "404-page"
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/api/*"]
   },
+
+  // One PokerTable object per table code, holding the deck, seats and chips.
+  "durable_objects": {
+    "bindings": [{ "name": "TABLES", "class_name": "PokerTable" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PokerTable"] }],
 
   "observability": {
     "enabled": true
