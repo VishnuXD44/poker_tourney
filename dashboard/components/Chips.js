@@ -1,5 +1,7 @@
 "use client";
 
+import { asset } from "@/lib/asset";
+
 /** Denominations with artwork in public/chips, largest first. */
 export const CHIP_VALUES = [1000, 500, 100, 25, 10, 5, 1];
 
@@ -23,7 +25,7 @@ export function Chip({ value, size = 24, className = "", style }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={`/chips/chip-${value}.svg`}
+      src={asset(`/chips/chip-${value}.svg`)}
       alt=""
       width={size}
       height={Math.round(size * ASPECT)}

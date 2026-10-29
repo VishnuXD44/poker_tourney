@@ -7,6 +7,9 @@
  * The JS `analyze` and the C++ `analyze` in CPP_PRELUDE must stay in step.
  */
 
+/** localStorage key for the strategy open in the builder. */
+export const BUILDER_STORAGE_KEY = "poker_tourney.strategy";
+
 export const NODE_W = 216;
 export const NODE_H = { start: 40, cond: 92, action: 68 };
 

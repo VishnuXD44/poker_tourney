@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "next build",
-    "start": "next start -p 3001"
+    "start": "next start -p 3001",
+    "build:site": "BASE_PATH=/poker next build",
+    "deploy": "npm run build:site && wrangler deploy"
   },
   "dependencies": {
     "next": "^14.2.0",
@@ -18,6 +20,7 @@
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.0",
     "postcss": "^8.4.38",
-    "tailwindcss": "^3.4.3"
+    "tailwindcss": "^3.4.3",
+    "wrangler": "^4.130.0"
   }
 }

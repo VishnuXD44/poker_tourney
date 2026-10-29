@@ -47,3 +47,18 @@ A drag-and-drop editor at `/builder` for players who don't write C++. A strategy
 - **`generateCpp`:** emits one C++ function per reachable block plus a fixed hand-analysis prelude, then uploads it through `POST /api/bots` like any other bot. Block params are whitelisted before they reach the source.
 
 The JS `analyze` and the C++ prelude implement the same hand reading (starting-hand tier, made hand, draws, rough equity) and must change together. Open branches fall back to check / fold. The graph is saved in `localStorage`.
+
+## Two arena modes
+
+`dashboard/lib/api.js` picks the mode from `NEXT_PUBLIC_API_URL`:
+
+- **Server** (set, as in `dashboard/.env.development`): the C++ arena described above, with uploads, compiling and matches on the game server.
+- **Browser** (unset, as in the public build): matches run on the page via `lib/localArena.js`, which drives the same engine (`server/game`, imported through `experimental.externalDir`) with builder strategies as the players. Bots are the house bots (the builder templates) plus strategies the visitor saved, kept in their browser's localStorage (`lib/myBots.js`). No visitor code runs anywhere, and there is no backend to host.
+
+## Hosting at bevishnu.com/poker
+
+`npm run build:site` (in `dashboard/`) builds a browser-mode static export into `dashboard/out/` with `BASE_PATH=/poker`; `npm run deploy` builds and uploads it as the `poker-dashboard` Worker (`dashboard/wrangler.jsonc`). That Worker has no public URL of its own: the bevishnu.com Worker (separate repo) forwards `/poker/*` to it through a service binding with the prefix stripped, so deploy this Worker first.
+
+- `public/_headers` sets the security headers (CSP, HSTS, nosniff, frame and permissions policies) and caches `/_next/static/*` forever (the filenames are content-hashed).
+- JetBrains Mono comes from `next/font` and is bundled at build time, so the page makes no third-party requests and the CSP can stay `'self'`. `'unsafe-inline'` scripts are needed for Next's inline bootstrap in a static export.
+- Plain `<img>` paths go through `lib/asset.js` to pick up the base path; `next/link` adds it itself.

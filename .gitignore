@@ -41,3 +41,7 @@ yarn-error.log*
 # Standalone engine binary
 poker_engine
 tests/hand_evaluator_test
+
+# Static export and local Cloudflare state (dashboard)
+dashboard/out/
+.wrangler/

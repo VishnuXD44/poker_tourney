@@ -4,8 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Panel from "@/components/Panel";
 import ChipStack from "@/components/Chips";
-import { API_URL, AUTH_HEADERS } from "@/lib/api";
+import { API_URL, AUTH_HEADERS, ARENA } from "@/lib/api";
+import { saveMyBot } from "@/lib/myBots";
 import {
+  BUILDER_STORAGE_KEY,
   NODE_TYPES,
   NODE_W,
   PALETTE,
@@ -28,12 +30,11 @@ import {
   randomStrategy,
 } from "@/lib/strategy";
 
-const STORAGE_KEY = "poker_tourney.strategy";
 const DECK = [..."23456789TJQKA"].flatMap((r) => [..."hdcs"].map((s) => r + s));
 
 function loadSaved() {
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    const saved = JSON.parse(localStorage.getItem(BUILDER_STORAGE_KEY));
     if (saved?.graph?.nodes?.some((n) => n.type === "start")) return saved;
   } catch {}
   return null;
@@ -184,7 +185,7 @@ export default function BuilderPage() {
   useEffect(() => {
     if (!loaded) return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ graph, name: botName }));
+      localStorage.setItem(BUILDER_STORAGE_KEY, JSON.stringify({ graph, name: botName }));
     } catch {}
   }, [graph, botName, loaded]);
 
@@ -399,6 +400,15 @@ export default function BuilderPage() {
   const fileName = `${botName.trim().replace(/[^\w-]+/g, "_") || "strategy"}.cpp`;
 
   const uploadBot = async () => {
+    if (ARENA === "browser") {
+      const saved = saveMyBot(botName, graph);
+      setUpload(
+        saved
+          ? { busy: false, error: "", ok: `saved ${saved.name}` }
+          : { busy: false, error: "couldn't save: this browser is blocking local storage", ok: "" }
+      );
+      return;
+    }
     setUpload({ busy: true, error: "", ok: "" });
     try {
       const res = await fetch(`${API_URL}/api/bots`, {
@@ -667,7 +677,7 @@ export default function BuilderPage() {
               </ul>
             )}
             <button type="button" onClick={uploadBot} disabled={upload.busy} className="btn mt-4">
-              {upload.busy ? "compiling…" : "upload + verify"}
+              {upload.busy ? "compiling…" : ARENA === "browser" ? "save to arena" : "upload + verify"}
             </button>
             <div className="grid grid-cols-2 gap-2 mt-2">
               <button type="button" onClick={download} className="text-[11px] uppercase tracking-[0.12em] py-2 rounded border border-line text-muted hover:text-ink hover:border-hi">

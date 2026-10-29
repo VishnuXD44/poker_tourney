@@ -1,5 +1,7 @@
 "use client";
 
+import { asset } from "@/lib/asset";
+
 const SUIT_NAMES = { h: "hearts", d: "diamonds", c: "clubs", s: "spades" };
 const RANK_FILES = { T: "10", J: "J", Q: "Q", K: "K", A: "A" };
 const RANK_LABELS = { T: "10", J: "jack", Q: "queen", K: "king", A: "ace" };
@@ -11,7 +13,7 @@ export function cardImagePath(cardStr) {
   const suit = SUIT_NAMES[cardStr.slice(-1).toLowerCase()];
   const file = RANK_FILES[rank] || (/^[2-9]$/.test(rank) ? rank : null);
   if (!suit || !file) return null;
-  return `/cards/${suit}-${file}.svg`;
+  return asset(`/cards/${suit}-${file}.svg`);
 }
 
 function cardLabel(cardStr) {
@@ -33,7 +35,7 @@ const SIZES = {
  */
 export default function PlayingCard({ card, faceDown = false, size = "md", className = "" }) {
   const height = SIZES[size] || SIZES.md;
-  const src = !faceDown && card ? cardImagePath(card) : "/cards/back.svg";
+  const src = !faceDown && card ? cardImagePath(card) : asset("/cards/back.svg");
 
   if (!src) {
     return (

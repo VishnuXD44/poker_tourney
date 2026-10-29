@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "poker-dashboard",
+  "compatibility_date": "2026-09-09",
+
+  // Static export of the dashboard (npm run build:site). No public URL of its own:
+  // bevishnu.com reaches it through a service binding and serves it at /poker.
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./out",
+    "not_found_handling": "404-page"
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}
