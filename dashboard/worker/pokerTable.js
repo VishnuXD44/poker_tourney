@@ -9,6 +9,9 @@
  * Tables are private: whoever opens one sets a PIN, and a socket sees nothing until it
  * sends that PIN. The code in the link finds the table; the PIN, sent separately, gets you in.
  *
+ * When the players are done, any of them can delete the table: its storage is wiped and
+ * every socket is closed. The code then points at an empty table again.
+ *
  * Sockets use accept() rather than the hibernation API on purpose: a hand in progress is an
  * engine call awaiting a player, which lives in memory. Chips and seats are saved after every
  * hand, so if the object restarts the table comes back paused at the last finished hand.
@@ -163,6 +166,11 @@ export class PokerTable {
         return;
       case "action":
         return this.act(token, msg);
+      case "delete":
+        // Not mid-game: pause first, so nobody loses a hand in progress without warning.
+        if (seatIndex === -1 || this.phase === "playing") return;
+        this.destroy(this.seats[seatIndex].name);
+        return;
       case "chat": {
         if (seatIndex === -1) return;
         const text = String(msg.text || "").trim().slice(0, CHAT_MAX);
@@ -189,6 +197,31 @@ export class PokerTable {
     }
     this.authed.add(ws);
     this.sendView(ws);
+  }
+
+  /** Erases everything stored for this table and disconnects everyone. */
+  async destroy(by) {
+    const authed = new Set(this.authed);
+    const sockets = [...this.sockets.keys()];
+    this.sockets.clear();
+    this.authed.clear();
+    this.seats = [];
+    this.settings = { ...DEFAULT_SETTINGS };
+    this.phase = "lobby";
+    this.handNumber = 0;
+    this.button = 0;
+    this.chat = [];
+    this.lastHand = null;
+    this.pin = null;
+    this.pinFailures = [];
+    this.rematchVotes.clear();
+    await this.ctx.storage.deleteAll();
+    for (const ws of sockets) {
+      if (authed.has(ws)) this.send(ws, { type: "deleted", by });
+      try {
+        ws.close(1000, "table deleted");
+      } catch {}
+    }
   }
 
   resetChips() {

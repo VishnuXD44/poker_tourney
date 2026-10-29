@@ -37,6 +37,7 @@ function newCode() {
 function useTable(code) {
   const [view, setView] = useState(null);
   const [locked, setLocked] = useState(null);
+  const [deleted, setDeleted] = useState(null); // { by } once someone deletes the table
   const [status, setStatus] = useState("connecting");
   const [error, setError] = useState("");
   const wsRef = useRef(null);
@@ -59,7 +60,13 @@ function useTable(code) {
       };
       ws.onmessage = (ev) => {
         const msg = JSON.parse(ev.data);
-        if (msg.type === "locked") {
+        if (msg.type === "deleted") {
+          // Nothing of this table survives, so this browser forgets its PIN and seat too.
+          closed = true;
+          storage((s) => s.removeItem(pinKey(code)));
+          storage((s) => s.removeItem(tokenKey(code)));
+          setDeleted({ by: msg.by });
+        } else if (msg.type === "locked") {
           const pin = storage((s) => s.getItem(pinKey(code)));
           if (pin) unlockWith(ws, pin);
           else setLocked({ fresh: msg.fresh });
@@ -111,7 +118,7 @@ function useTable(code) {
     if (token) ws.send(JSON.stringify({ type: "join", token, name: storage((s) => s.getItem(NAME_KEY)) || "" }));
   }
 
-  return { view, locked, status, error, send, unlock };
+  return { view, locked, deleted, status, error, send, unlock };
 }
 
 // ---- lobby / landing -------------------------------------------------------------------
@@ -366,6 +373,7 @@ function Lobby({ code, view, send, error }) {
                   leave seat
                 </button>
               </div>
+              <DeleteTable send={send} />
             </>
           )}
           <p className="text-[11px] text-muted leading-relaxed">
@@ -374,6 +382,55 @@ function Lobby({ code, view, send, error }) {
         </div>
       </div>
     </Panel>
+  );
+}
+
+/** Two-step "delete this table forever", for when the players are done with it. */
+function DeleteTable({ send }) {
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming) {
+    return (
+      <button className="text-xs text-muted hover:text-danger underline underline-offset-4" onClick={() => setConfirming(true)}>
+        delete this table
+      </button>
+    );
+  }
+  return (
+    <div role="alertdialog" aria-label="Delete this table" className="rounded border border-danger/60 p-4 space-y-3 text-left">
+      <p className="text-xs leading-relaxed">
+        <span className="text-danger">Delete forever?</span> Seats, chips, chat and the PIN are erased for everyone, and anyone still here is
+        disconnected. This can&apos;t be undone.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button
+          className="btn !w-auto px-4 !border-danger !text-danger hover:!bg-danger hover:!text-surface"
+          onClick={() => send({ type: "delete" })}
+        >
+          delete forever
+        </button>
+        <button className="btn !w-auto px-4" onClick={() => setConfirming(false)}>
+          keep it
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Deleted({ deleted }) {
+  return (
+    <div className="max-w-md">
+      <Panel index="01" title="table deleted">
+        <div className="space-y-5">
+          <p className="text-sm">{deleted.by ? `${deleted.by} deleted this table.` : "This table was deleted."}</p>
+          <p className="text-xs text-muted leading-relaxed">
+            Its seats, chips, chat and PIN are gone from the server, and this browser has forgotten them too.
+          </p>
+          <a className="btn block text-center" href={`${BASE}/table`}>
+            open a new table
+          </a>
+        </div>
+      </Panel>
+    </div>
   );
 }
 
@@ -580,6 +637,9 @@ function GameOver({ view, send }) {
           <p className="text-[11px] text-muted">
             everyone goes back to {view.settings.startingChips.toLocaleString()} chips and the next game deals right away.
           </p>
+          <div className="pt-3">
+            <DeleteTable send={send} />
+          </div>
         </div>
       )}
     </div>
@@ -766,7 +826,7 @@ export default function TablePage() {
     const room = new URLSearchParams(location.search).get("room")?.toLowerCase() || "";
     setCode(CODE_RE.test(room) ? room : null);
   }, []);
-  const { view, locked, status, error, send, unlock } = useTable(code);
+  const { view, locked, deleted, status, error, send, unlock } = useTable(code);
   useTableSounds(view);
 
   // Browsers only allow audio after a user gesture.
@@ -796,8 +856,8 @@ export default function TablePage() {
           play with friends <span className="text-muted font-normal text-xs sm:text-sm ml-2">private texas hold&apos;em tables</span>
         </h1>
         <div className="flex items-center gap-5 text-xs">
-          {code && view && <SoundToggle />}
-          {code && (
+          {code && view && !deleted && <SoundToggle />}
+          {code && !deleted && (
             <p className="flex items-center gap-2" role="status">
               <span aria-hidden>{status === "online" ? "●" : "○"}</span>
               <span className={status === "online" ? "text-ink" : "text-muted"}>{status}</span>
@@ -808,9 +868,10 @@ export default function TablePage() {
 
       <main id="main-content">
         {code === null && <Landing />}
-        {code && locked && <Unlock code={code} locked={locked} error={error} unlock={unlock} />}
-        {code && !locked && !view && <p className="text-xs text-muted">connecting to table {code}…</p>}
-        {code && !locked && view && (
+        {code && deleted && <Deleted deleted={deleted} />}
+        {code && !deleted && locked && <Unlock code={code} locked={locked} error={error} unlock={unlock} />}
+        {code && !deleted && !locked && !view && <p className="text-xs text-muted">connecting to table {code}…</p>}
+        {code && !deleted && !locked && view && (
           // Phones: table, then seats and chat, then the guide. lg: guide moves under chat. xl: guide on the left.
           <div className="grid gap-6 lg:gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[18rem_minmax(0,1fr)_20rem] 2xl:grid-cols-[20rem_minmax(0,1fr)_22rem] items-start">
             <div className="min-w-0 lg:col-start-1 lg:row-start-1 lg:row-span-2 xl:col-start-2">

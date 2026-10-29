@@ -65,6 +65,7 @@ The JS `analyze` and the C++ prelude implement the same hand reading (starting-h
 - **Rematch:** when a game ends, every screen shows the last hand and a rematch button. Anyone seated can ask; once every seat has, stacks reset and the next game deals immediately.
 - **Hand reading** (`lib/hands.js`): names hands in words, explains each result ("two pair beats a pair", kickers, split and side pots) using the engine's own evaluator, and finds your best five cards. It drives the "why" box after every hand (arena too) and the hand guide sidebar (`components/HandGuide.js`).
 - **Sound** (`lib/sounds.js`): effects synthesised with Web Audio, so no audio files. They're triggered by new log events, your turn and incoming chat; muting is saved per browser.
+- **Deleting:** any seated player can delete the table when no game is running (lobby or game over; pause first mid-game). The object wipes its storage with `deleteAll()`, tells everyone with the PIN who deleted it, and closes every socket; each browser drops its saved PIN and seat token for that code. The code then opens as a brand-new table.
 - **Persistence:** seats, chips, button, hand count and chat are saved after every hand. Sockets use `accept()`, not hibernation, because a hand in progress is an in-memory promise; if the object restarts, the hand in progress is lost and the table reopens paused at the last finished hand.
 - **`worker/index.js`** routes `/api/table/<code>/ws` (same-origin upgrades only) to the object; `run_worker_first: ["/api/*"]` keeps every other path on static assets.
 
